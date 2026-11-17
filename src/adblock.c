@@ -690,7 +690,7 @@ void adblock_init(void)
     g_timeout_add_seconds(6 * 3600, update_if_stale, NULL);
 }
 
-/* the ☰ menu switch and Preferences */
+/* Preferences → Ad Blocking → Block ads */
 void adblock_set_enabled(gboolean on)
 {
     pref_set_bool("adblock", on);

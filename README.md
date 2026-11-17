@@ -18,8 +18,8 @@ A fast, lightweight web browser written in C on WebKitGTK.
   The window icon and window menu are left out of the title bar so nothing sits left of the toggle. This layout is
   fixed; there is no separate toolbar row.
 - **☰ menu** button: one short flat list with only what has no button of its own — New Window;
-  History, Downloads; Find, Print, Save Page As, Open File, Full Screen, Developer Tools; Block Ads;
-  Light Theme / Dark Theme; Preferences, Delete Private Data; Keyboard Shortcuts, About. Ctrl+Q quits (closes all windows). Tabs are managed in the tab
+  History; Find, Print, Save Page As, Open File, Full Screen, Developer Tools;
+  Light Theme / Dark Theme; Preferences; Keyboard Shortcuts, About. Ctrl+Q quits (closes all windows). Tabs are managed in the tab
   bar and its right-click menu, bookmarks in the bookmarks bar, zoom with the zoom button, and
   images, JavaScript and mouse gestures in Preferences. There is no menu bar.
 - **Vertical tab bar** on the left, toggled with the title bar button or **F9**. It slides
@@ -52,13 +52,13 @@ A fast, lightweight web browser written in C on WebKitGTK.
   while the mouse is on the link, as do short messages ("Bookmark added"). Loading progress is shown
   in the address bar.
 - **History** (☰ → History, **Ctrl+H**) drops down as a popup under the ☰ button, **Downloads**
-  (the downloads button next to the address bar, ☰ → Downloads, **Ctrl+J**) under its button; in full
+  (the downloads button next to the address bar, **Ctrl+J**) under its button; in full
   screen both drop from the top of the page. History is grouped by day and has a search field; Del
   deletes the selected entry. Double-click an entry to open it in the current tab (the popup closes),
   middle-click for a background tab. Press the shortcut again or Esc to close.
 - **Downloads button:** while something downloads, a ring around its icon fills up with the overall
   progress (a turning arc when the size isn't known); the tooltip shows how many and the percentage.
-- **Ad blocking** (on by default; ☰ → Block Ads switches it off and on), working like the VIA
+- **Ad blocking** (on by default; Preferences → Ad Blocking switches it off and on), working like the VIA
   browser's:
   - **Filter lists** in Adblock Plus format, EasyList by default. They are downloaded on first use and
     again every 4 days; Preferences → Ad Blocking takes more list addresses (e.g. a list for your
@@ -130,7 +130,7 @@ A fast, lightweight web browser written in C on WebKitGTK.
   libaom/dav1d, OpenH264, libde265, mpg123...). The other kind stays as a fallback. *Automatic* keeps
   GStreamer's choice (today: libvpx for VP8/VP9, FFmpeg for H.264). WebKitGTK always plays media through
   GStreamer; FFmpeg is used as GStreamer plugins, not as a separate engine.
-- Delete Private Data (Ctrl+Shift+Del), Preferences (Ctrl+F12 or Alt+P).
+- Delete Private Data (Ctrl+Shift+Del, or Preferences → Advanced), Preferences (Ctrl+F12 or Alt+P).
 - The session is restored on startup.
 
 The full shortcut list is under ☰ → Keyboard Shortcuts.

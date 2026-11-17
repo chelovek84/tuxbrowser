@@ -1264,7 +1264,8 @@ static void on_settings_changed(gpointer data)
 }
 
 /* The main menu holds only what has no button elsewhere: tabs are managed in the tab bar
- * (and its right-click menu), bookmarks in the bookmarks bar, zoom in the zoom button. */
+ * (and its right-click menu), bookmarks in the bookmarks bar, zoom in the zoom button,
+ * downloads in the downloads button, deleting private data in Preferences. */
 static GMenuModel *build_main_menu(BrowserWindow *bw)
 {
     GMenu *root = g_menu_new();
@@ -1274,7 +1275,6 @@ static GMenuModel *build_main_menu(BrowserWindow *bw)
     g_menu_append(s, "New _Window", "win.new-window");
     SEC();
     g_menu_append(s, "_History", "win.show-history");
-    g_menu_append(s, "_Downloads", "win.show-downloads");
     SEC();
     g_menu_append(s, "_Find...", "win.find");
     g_menu_append(s, "_Print...", "win.print");
@@ -1283,13 +1283,10 @@ static GMenuModel *build_main_menu(BrowserWindow *bw)
     g_menu_append(s, "F_ull Screen", "win.fullscreen");
     g_menu_append(s, "_Developer Tools", "win.inspector");
     SEC();
-    g_menu_append(s, "Block _Ads", "app.adblock");
-    SEC();
     g_menu_append(s, "_Light Theme", "app.theme::light");
     g_menu_append(s, "Dar_k Theme", "app.theme::dark");
     SEC();
     g_menu_append(s, "_Preferences...", "win.preferences");
-    g_menu_append(s, "Delete Private _Data...", "win.private-data");
     SEC();
     g_menu_append(s, "_Keyboard Shortcuts", "win.shortcuts");
     g_menu_append(s, "_About " APP_NAME, "win.about");
