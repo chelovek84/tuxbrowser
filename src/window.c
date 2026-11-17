@@ -1767,7 +1767,7 @@ static void a_shortcuts(GSimpleAction *a, GVariant *p, gpointer data)
         { "Ctrl+Tab, Ctrl+PgDn", "Next tab" }, { "Ctrl+Shift+Tab, Ctrl+PgUp", "Previous tab" },
         { "Alt+1 … Alt+9", "Switch to tab" },
         { "Ctrl+N", "New window" }, { "F8, Ctrl+L, Alt+D", "Go to address bar" }, { "Ctrl+K, Ctrl+E", "Search (focus address bar)" },
-        { "Shift+Enter", "Open address in new tab" }, { "Alt+Left / Alt+Right", "Back / Forward" },
+        { "Shift+Enter", "Open address in new tab" }, { "Ctrl+Shift+V", "Paste and go (address bar)" }, { "Alt+Left / Alt+Right", "Back / Forward" },
         { "F5, Ctrl+R", "Reload" }, { "Ctrl+F5", "Reload without cache" },
         { "Ctrl+D", "Bookmark page" }, { "F4", "Show/hide panel" }, { "F9", "Show/hide vertical tab bar" }, { "F7", "Show/hide vertical bookmarks bar" }, { "Ctrl+Shift+B", "Bookmarks panel" },
         { "Ctrl+Shift+H, Ctrl+H", "History panel" }, { "Ctrl+J", "Transfers panel" }, { "Ctrl+Shift+N", "Notes panel" },
@@ -1954,8 +1954,101 @@ static gboolean on_completion_selected(GtkEntryCompletion *c, GtkTreeModel *m, G
     return TRUE;
 }
 
+/* ---- paste and go ---- */
+
+
+/* whitespace runs become one space; line breaks are dropped (join) or become spaces */
+static char *squeeze(const char *raw, gboolean join_lines)
+{
+    GString *o = g_string_new(NULL);
+    gboolean space = FALSE;
+    for (const char *p = raw; *p; p++) {
+        if (join_lines && (*p == '\r' || *p == '\n')) continue;
+        if (g_ascii_isspace(*p)) { space = TRUE; continue; }
+        if (space && o->len) g_string_append_c(o, ' ');
+        space = FALSE;
+        g_string_append_c(o, *p);
+    }
+    if (!o->len) { g_string_free(o, TRUE); return NULL; }
+    return g_string_free(o, FALSE);
+}
+
+static gboolean input_is_address(const char *s);
+
+/* clipboard text as one line, NULL if there is none. An address copied across two
+ * lines is joined back together; other text keeps its words apart. */
+static char *one_line(const char *raw)
+{
+    char *joined = squeeze(raw, TRUE);
+    if (joined && input_is_address(joined)) return joined;
+    g_free(joined);
+    return squeeze(raw, FALSE);
+}
+
+static char *clipboard_line(GtkWidget *w)
+{
+    char *raw = gtk_clipboard_wait_for_text(gtk_widget_get_clipboard(w, GDK_SELECTION_CLIPBOARD));
+    char *line = raw ? one_line(raw) : NULL;
+    g_free(raw);
+    return line;
+}
+
+/* whether Enter on this text goes to an address (rather than searching) */
+static gboolean input_is_address(const char *s)
+{
+    const char *sp = strchr(s, ' ');
+    if (sp) {   /* "w linux": a search keyword */
+        char *kw = g_strndup(s, sp - s);
+        gboolean keyword = FALSE;
+        for (guint i = 0; i < profile->engines->len && !keyword; i++) {
+            SearchEngine *se = profile->engines->pdata[i];
+            keyword = *se->keyword && g_str_equal(kw, se->keyword);
+        }
+        g_free(kw);
+        if (keyword) return FALSE;
+    }
+    return looks_like_host(s) || (g_uri_peek_scheme(s) && !sp) || s[0] == '/' || g_str_has_prefix(s, "~/");
+}
+
+static void paste_and_go(BrowserWindow *bw)
+{
+    char *text = clipboard_line(bw->address);
+    if (!text) return;
+    submit_address(bw, text, FALSE);
+    g_free(text);
+}
+
+static void on_paste_go_item(GtkMenuItem *mi, BrowserWindow *bw) { paste_and_go(bw); }
+
+/* address bar right-click menu: "Paste and Go" / "Paste and Search" below "Paste" */
+static void on_address_popup(GtkEntry *e, GtkWidget *menu, BrowserWindow *bw)
+{
+    if (!GTK_IS_MENU(menu)) return;   /* touch selection popovers */
+    char *text = clipboard_line(GTK_WIDGET(e));
+    GtkWidget *mi = gtk_menu_item_new_with_mnemonic(
+        text && !input_is_address(text) ? "Paste and _Search" : "Paste and _Go");
+    gtk_widget_set_sensitive(mi, text != NULL);
+    g_signal_connect(mi, "activate", G_CALLBACK(on_paste_go_item), bw);
+    g_free(text);
+
+    int pos = 3, i = 0;   /* GTK's order: Cut, Copy, Paste, ... */
+    GList *items = gtk_container_get_children(GTK_CONTAINER(menu));
+    const char *paste = g_dgettext("gtk30", "_Paste");
+    for (GList *l = items; l; l = l->next, i++)
+        if (GTK_IS_MENU_ITEM(l->data) && g_strcmp0(gtk_menu_item_get_label(l->data), paste) == 0) pos = i + 1;
+    g_list_free(items);
+    gtk_menu_shell_insert(GTK_MENU_SHELL(menu), mi, pos);
+    gtk_widget_show(mi);
+}
+
 static gboolean on_address_key(GtkWidget *w, GdkEventKey *ev, BrowserWindow *bw)
 {
+    /* Ctrl+Shift+V: paste and go (only here; in pages it pastes without formatting) */
+    if ((ev->keyval == GDK_KEY_V || ev->keyval == GDK_KEY_v)
+        && (ev->state & gtk_accelerator_get_default_mod_mask()) == (GDK_CONTROL_MASK | GDK_SHIFT_MASK)) {
+        paste_and_go(bw);
+        return TRUE;
+    }
     if (ev->keyval == GDK_KEY_Escape) {
         Tab *t = browser_window_current_tab(bw);
         if (t) {
@@ -2322,6 +2415,7 @@ static void build_address_bar(BrowserWindow *bw)
     gtk_entry_set_input_purpose(GTK_ENTRY(bw->address), GTK_INPUT_PURPOSE_URL);
     gtk_widget_set_hexpand(bw->address, TRUE);
     g_signal_connect(bw->address, "activate", G_CALLBACK(on_address_activate), bw);
+    g_signal_connect(bw->address, "populate-popup", G_CALLBACK(on_address_popup), bw);
     g_signal_connect(bw->address, "changed", G_CALLBACK(on_address_changed), bw);
     g_signal_connect(bw->address, "key-press-event", G_CALLBACK(on_address_key), bw);
     g_signal_connect(bw->address, "focus-in-event", G_CALLBACK(on_entry_focus_in), bw);

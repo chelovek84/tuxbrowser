@@ -52,6 +52,9 @@ A fast, lightweight web browser written in C on WebKitGTK.
 - Address bar: shows load progress inside the field, a padlock and site info, a bookmark
   star, and completion from bookmarks and history. **Shift+Enter** opens the address in a
   new tab.
+- **Paste and Go:** right-click the address bar for "Paste and Go" (or "Paste and Search" when the
+  clipboard isn't an address), or press **Ctrl+Shift+V** in the address bar. An address copied across
+  two lines is joined back together.
 - **One box for addresses and search.** Type an address or a search; the first suggestion shows
   what Enter will do ("Go to address" or "Search with …"), followed by matching bookmarks and
   history. Keywords pick an engine, e.g. `g cats` (Google) or `w linux` (Wikipedia). The default
