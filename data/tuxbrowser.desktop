@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Tux Browser
+GenericName=Web Browser
+Comment=Fast, lightweight WebKitGTK web browser
+Exec=tuxbrowser %U
+Icon=web-browser
+Terminal=false
+Categories=Network;WebBrowser;GTK;
+MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
+StartupWMClass=tuxbrowser
