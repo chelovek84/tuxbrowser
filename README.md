@@ -133,3 +133,9 @@ the UI thread at that moment (repeated every second while it stays frozen).
 
 `TUXBROWSER_SCREENSHOT=window.png ./tuxbrowser` saves a picture of the first window (title bar included)
 six seconds after it opens, rendered by Tux Browser itself.
+
+## License
+
+[MIT](LICENSE) © 2026 chelovek84
+
+Tux Browser uses [WebKitGTK](https://webkitgtk.org/) and [GTK 3](https://www.gtk.org/) (both LGPL-2.1-or-later) and [SQLite](https://sqlite.org/) (public domain), linked dynamically.
