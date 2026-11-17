@@ -8,6 +8,23 @@ static WebKitSettings *settings;
 WebKitWebContext *web_context(void) { return ctx; }
 WebKitSettings *web_settings(void) { return settings; }
 
+/* Scrollable boxes inside a page (news feeds, chat panes) are scrolled on the main
+ * thread like the rest of the page, not on a separate compositing layer. That layer
+ * draws text with grayscale antialiasing, so the box's text looks heavier than the
+ * page around it, and with CPU painting (low graphics memory) the wheel animation
+ * crawls for seconds, so the content keeps sliding under a resting mouse and the
+ * hovered link is no longer the one under the pointer. */
+static void disable_async_overflow_scrolling(void)
+{
+    WebKitFeatureList *list = webkit_settings_get_all_features();
+    for (gsize i = 0; i < webkit_feature_list_get_length(list); i++) {
+        WebKitFeature *f = webkit_feature_list_get(list, i);
+        if (g_str_equal(webkit_feature_get_identifier(f), "AsyncOverflowScrolling"))
+            webkit_settings_set_feature_enabled(settings, f, FALSE);
+    }
+    webkit_feature_list_unref(list);
+}
+
 void web_apply_settings(void)
 {
     webkit_settings_set_auto_load_images(settings, pref_get_bool("load_images"));
@@ -183,6 +200,7 @@ void web_init(void)
     webkit_settings_set_media_playback_requires_user_gesture(settings, FALSE);
     webkit_settings_set_enable_webgl(settings, TRUE);
     webkit_settings_set_default_charset(settings, "utf-8");
+    disable_async_overflow_scrolling();
     web_apply_settings();
 
     start_page_init(ctx);
