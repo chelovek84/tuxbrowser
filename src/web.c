@@ -35,11 +35,8 @@ void web_apply_settings(void)
     webkit_settings_set_user_agent(settings, *ua ? ua : DEFAULT_USER_AGENT);
     g_free(ua);
 
-    /* Low graphics memory mode also turns compositing off unless "Always" is chosen:
-     * with CPU painting, WebKit's compositor sometimes draws the page's base layer
-     * shifted for a frame while part of the page scrolls, so the page shakes. */
     char *hw = pref_get_string("hw_accel");
-    if (g_str_equal(hw, "never") || (g_str_equal(hw, "default") && web_low_gpu_memory))
+    if (g_str_equal(hw, "never"))
         webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_NEVER);
     else if (g_str_equal(hw, "always"))
         webkit_settings_set_hardware_acceleration_policy(settings, WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS);
@@ -152,8 +149,7 @@ const char *web_opt_gpu_memory;
  * low mode pages are painted by the CPU and video frames don't go through GL, which
  * keeps video memory free for the desktop and other programs (on a 1 GB card, running
  * out shows up as frozen windows, corrupted video and blank video in other browsers).
- * Compositing is turned off too (see web_apply_settings). Variables already set by
- * the user win. */
+ * Compositing stays on. Variables already set by the user win. */
 gboolean web_low_gpu_memory;
 
 static void apply_gpu_memory_mode(gboolean small)

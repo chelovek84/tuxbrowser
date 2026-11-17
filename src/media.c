@@ -253,7 +253,7 @@ static const char *library_label(Dec *d)
 
 static void print_summary(void)
 {
-    g_printerr("tuxbrowser: graphics memory: %s\n", web_low_gpu_memory ? "low (CPU painting, no compositing, no GL video sink)" : "normal");
+    g_printerr("tuxbrowser: graphics memory: %s\n", web_low_gpu_memory ? "low (CPU painting, no GL video sink)" : "normal");
     g_printerr("tuxbrowser: video decoding: %s; software decoders: %s\n",
                web_video_software ? "software preferred" : mode_hw ? "hardware preferred" : "GStreamer default",
                g_str_equal(library_mode, "ffmpeg") ? "FFmpeg first"
