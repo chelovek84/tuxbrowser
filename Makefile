@@ -1,7 +1,7 @@
 # Tux Browser - fast, lightweight WebKitGTK web browser
 PREFIX  ?= /usr/local
 CC      ?= cc
-PKGS     = webkit2gtk-4.1 gtk+-3.0 sqlite3
+PKGS     = webkit2gtk-4.1 gtk+-3.0 sqlite3 libsoup-3.0
 CFLAGS  ?= -O2 -g
 LDFLAGS += -rdynamic
 CFLAGS  += -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers \

@@ -9,16 +9,18 @@
 #define APP_ID       "org.tuxbrowser.Browser"
 #define APP_VERSION  "1.0"
 #define START_URI "tuxbrowser://start"
-/* Sent when no custom user agent is set: current Chrome on Linux (reduced UA format), so
- * sites serve their full desktop experience rather than a reduced "unknown Safari" one. */
-#define DEFAULT_USER_AGENT "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+/* Sent when no custom user agent is set: current Safari on macOS. The engine is WebKit, so
+ * sites send code written and tested for it, and the identity matches what the engine
+ * really supports (no Chrome client hints that bot checks would find missing). Sites still
+ * serve their full desktop version, unlike for an "unknown Safari on Linux". */
+#define DEFAULT_USER_AGENT "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15"
 
 /* ------------------------------------------------------------------ */
 /* profile.c : settings, bookmarks, history, session */
 
 typedef enum {
     EV_SETTINGS, EV_BOOKMARKS, EV_HISTORY,
-    EV_CLOSED_TABS, EV_DOWNLOADS,
+    EV_CLOSED_TABS, EV_DOWNLOADS, EV_ADBLOCK,
     EV_LAST
 } ProfileEvent;
 
@@ -126,6 +128,9 @@ struct _BrowserWindow {
     GtkWidget *menu_button, *trash_button, *newtab_button;
     GtkWidget *toolbar;
     GtkWidget *back_btn, *fwd_btn, *reload_btn, *zoom_btn, *zoom_btn_label;
+    GtkWidget *downloads_btn, *downloads_ring;  /* title bar button; progress ring around its icon */
+    double downloads_frac;        /* overall progress 0..1, < 0 while sizes are unknown */
+    int downloads_running, downloads_spin;
     GtkWidget *address;
     GtkListStore *completion_store;
     GtkWidget *content_stack;
@@ -213,6 +218,23 @@ void transfer_cancel(Transfer *t);
 void transfer_open(Transfer *t, gboolean folder);
 void transfers_clear_finished(void);
 
+/* adblock.c : filter lists, own rules, per-site exceptions, element picker */
+void        adblock_init(void);
+void        adblock_attach(WebKitUserContentManager *ucm);
+void        adblock_page_changed(WebKitUserContentManager *ucm, const char *uri);
+void        adblock_set_enabled(gboolean on);
+void        adblock_update_lists(void);
+gboolean    adblock_updating(void);
+const char *adblock_status(void);
+char       *adblock_site_for_uri(const char *uri);   /* host without www., NULL if not a web page */
+gboolean    adblock_site_is_allowed(const char *uri);
+void        adblock_set_site_allowed(const char *uri, gboolean allow);
+void        adblock_set_allowed_sites(const char *text);
+void        adblock_pick_element(WebKitWebView *view);
+char       *adblock_get_rules(void);
+void        adblock_set_rules(const char *text);
+#define ADBLOCK_DEFAULT_LISTS "https://easylist.to/easylist/easylist.txt"
+
 /* popups.c : History and Downloads popovers */
 void history_popup_toggle(BrowserWindow *bw);
 void downloads_popup_toggle(BrowserWindow *bw);
@@ -224,6 +246,7 @@ void bookmark_edit_dialog(GtkWindow *parent, const char *url, const char *title,
 
 /* theme.c */
 void theme_load(void);
+void theme_apply(void);
 
 /* util */
 char *format_size(guint64 bytes);

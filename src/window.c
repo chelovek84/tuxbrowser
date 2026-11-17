@@ -5,6 +5,7 @@
 static GList *windows;          /* BrowserWindow*, most recently focused first */
 static gboolean quitting;
 static gboolean restoring;   /* append tabs in order while restoring a session */
+static GtkWidget *build_downloads_button(BrowserWindow *bw);
 
 GList *browser_windows(void) { return windows; }
 
@@ -1282,6 +1283,11 @@ static GMenuModel *build_main_menu(BrowserWindow *bw)
     g_menu_append(s, "F_ull Screen", "win.fullscreen");
     g_menu_append(s, "_Developer Tools", "win.inspector");
     SEC();
+    g_menu_append(s, "Block _Ads", "app.adblock");
+    SEC();
+    g_menu_append(s, "_Light Theme", "app.theme::light");
+    g_menu_append(s, "Dar_k Theme", "app.theme::dark");
+    SEC();
     g_menu_append(s, "_Preferences...", "win.preferences");
     g_menu_append(s, "Delete Private _Data...", "win.private-data");
     SEC();
@@ -1560,6 +1566,21 @@ static void a_open_file(GSimpleAction *a, GVariant *p, gpointer data)
 static void a_preferences(GSimpleAction *a, GVariant *p, gpointer data) { prefs_dialog_show(GTK_WINDOW(BW->window)); }
 static void a_private_data(GSimpleAction *a, GVariant *p, gpointer data) { private_data_dialog_show(GTK_WINDOW(BW->window)); }
 static void a_show_history(GSimpleAction *a, GVariant *p, gpointer data)   { history_popup_toggle(BW); }
+static void a_block_element(GSimpleAction *a, GVariant *p, gpointer data)  { if (CUR) adblock_pick_element(CUR->view); }
+static void a_adblock_site(GSimpleAction *a, GVariant *p, gpointer data)
+{
+    Tab *t = CUR;
+    if (!t) return;
+    gboolean allow = !adblock_site_is_allowed(tab_get_uri(t));
+    adblock_set_site_allowed(tab_get_uri(t), allow);
+    char *site = adblock_site_for_uri(tab_get_uri(t));
+    char *msg = g_strdup_printf(allow ? "Ads allowed on %s" : "Ads blocked on %s", site ? site : "this site");
+    browser_window_flash_status(BW, msg);
+    g_free(msg);
+    g_free(site);
+    adblock_page_changed(t->ucm, tab_get_uri(t));   /* before the reload starts */
+    webkit_web_view_reload(t->view);
+}
 static void a_show_downloads(GSimpleAction *a, GVariant *p, gpointer data) { downloads_popup_toggle(BW); }
 
 
@@ -1675,6 +1696,7 @@ static const GActionEntry win_actions[] = {
     { "print", a_print }, { "save-page", a_save_page }, { "open-file", a_open_file },
     { "preferences", a_preferences }, { "private-data", a_private_data },
     { "show-history", a_show_history }, { "show-downloads", a_show_downloads },
+    { "block-element", a_block_element }, { "adblock-site", a_adblock_site },
     { "toggle-vtabs", NULL, NULL, "false", s_vtabs },
     { "toggle-vbookmarks", NULL, NULL, "false", s_vbookmarks },
     { "bookmark-edit", a_bookmark_edit, "s" }, { "bookmark-delete", a_bookmark_delete, "s" },
@@ -2390,6 +2412,7 @@ BrowserWindow *browser_window_new(GtkApplication *app)
     gtk_widget_set_valign(bw->vbm_button, GTK_ALIGN_CENTER);
     gtk_actionable_set_action_name(GTK_ACTIONABLE(bw->vbm_button), "win.toggle-vbookmarks");
     build_address_bar(bw);
+    gtk_box_pack_start(GTK_BOX(bw->toolbar), build_downloads_button(bw), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bw->toolbar), bw->vbm_button, FALSE, FALSE, 0);
     /* the toggle is outside the padded address bar so it can reach the window edges */
     GtkWidget *toolrow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
@@ -2554,6 +2577,95 @@ BrowserWindow *browser_window_new(GtkApplication *app)
         g_timeout_add_seconds(6, self_screenshot, bw->window);
     }
     return bw;
+}
+
+/* ---------------------------------------------------------------- */
+/* downloads button (next to the address bar)                       */
+
+/* While something downloads, a ring around the icon fills up with the overall progress
+ * (a turning arc when sizes are unknown); the tooltip has the count and percentage. */
+static void downloads_button_update(gpointer data)
+{
+    BrowserWindow *bw = data;
+    guint running = 0;
+    guint64 got = 0, total = 0;
+    gboolean sized = TRUE;
+    for (guint i = 0; i < transfers->len; i++) {
+        Transfer *t = transfers->pdata[i];
+        if (t->state != 0) continue;
+        running++;
+        got += t->received;
+        total += t->total;
+        if (!t->total) sized = FALSE;
+    }
+    bw->downloads_running = running;
+    bw->downloads_frac = running && sized && total ? (double)got / total : -1;
+    bw->downloads_spin = (bw->downloads_spin + 1) % 8;   /* called every 0.5 s while downloading */
+    GtkStyleContext *sc = gtk_widget_get_style_context(bw->downloads_btn);
+    if (running) gtk_style_context_add_class(sc, "active");
+    else gtk_style_context_remove_class(sc, "active");
+    char *tip = !running ? g_strdup("Downloads (Ctrl+J)")
+              : bw->downloads_frac >= 0 ? g_strdup_printf("Downloads: %u in progress, %d%% (Ctrl+J)", running,
+                                                          (int)(100 * bw->downloads_frac))
+              : g_strdup_printf("Downloads: %u in progress (Ctrl+J)", running);
+    gtk_widget_set_tooltip_text(bw->downloads_btn, tip);
+    g_free(tip);
+    gtk_widget_queue_draw(bw->downloads_ring);
+}
+
+static gboolean draw_downloads_ring(GtkWidget *w, cairo_t *cr, BrowserWindow *bw)
+{
+    if (!bw->downloads_running) return FALSE;
+    double cx = gtk_widget_get_allocated_width(w) / 2.0, cy = gtk_widget_get_allocated_height(w) / 2.0;
+    double r = MIN(cx, cy) - 1.5;
+    GdkRGBA fg;
+    gtk_style_context_get_color(gtk_widget_get_style_context(w), gtk_widget_get_state_flags(w), &fg);
+    cairo_set_line_width(cr, 2.0);
+    cairo_set_source_rgba(cr, fg.red, fg.green, fg.blue, 0.22);   /* track */
+    cairo_arc(cr, cx, cy, r, 0, 2 * G_PI);
+    cairo_stroke(cr);
+    cairo_set_source_rgba(cr, fg.red, fg.green, fg.blue, 1.0);   /* progress, from 12 o'clock */
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    double start = -G_PI / 2, len = 2 * G_PI * bw->downloads_frac;
+    if (bw->downloads_frac < 0) {                                 /* unknown size: a turning arc */
+        start += bw->downloads_spin * G_PI / 4;
+        len = G_PI / 2;
+    }
+    if (len > 0.01) {
+        cairo_arc(cr, cx, cy, r, start, start + len);
+        cairo_stroke(cr);
+    }
+    return FALSE;
+}
+
+static void downloads_clicked(GtkButton *b, BrowserWindow *bw) { downloads_popup_toggle(bw); }
+
+static GtkWidget *build_downloads_button(BrowserWindow *bw)
+{
+    /* same size and alignment as the back/forward/reload buttons: a 24 px slot with the
+     * icon in the middle, small enough for the ring to fit around it */
+    bw->downloads_btn = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(bw->downloads_btn), GTK_RELIEF_NONE);
+    gtk_widget_set_focus_on_click(bw->downloads_btn, FALSE);
+    gtk_widget_set_can_focus(bw->downloads_btn, FALSE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(bw->downloads_btn), "nav-button");
+    gtk_widget_set_name(bw->downloads_btn, "downloads-button");
+    gtk_widget_set_valign(bw->downloads_btn, GTK_ALIGN_CENTER);
+    GtkWidget *ov = gtk_overlay_new();
+    GtkWidget *img = gtk_image_new_from_icon_name("folder-download-symbolic", GTK_ICON_SIZE_LARGE_TOOLBAR);
+    gtk_image_set_pixel_size(GTK_IMAGE(img), 14);
+    gtk_widget_set_size_request(img, 24, 24);
+    gtk_container_add(GTK_CONTAINER(ov), img);
+    bw->downloads_ring = gtk_drawing_area_new();
+    gtk_style_context_add_class(gtk_widget_get_style_context(bw->downloads_ring), "downloads-ring");
+    g_signal_connect(bw->downloads_ring, "draw", G_CALLBACK(draw_downloads_ring), bw);
+    gtk_overlay_add_overlay(GTK_OVERLAY(ov), bw->downloads_ring);
+    gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(ov), bw->downloads_ring, TRUE);
+    gtk_container_add(GTK_CONTAINER(bw->downloads_btn), ov);
+    g_signal_connect(bw->downloads_btn, "clicked", G_CALLBACK(downloads_clicked), bw);
+    profile_connect(EV_DOWNLOADS, downloads_button_update, bw);
+    downloads_button_update(bw);
+    return bw->downloads_btn;
 }
 
 /* ---------------------------------------------------------------- */

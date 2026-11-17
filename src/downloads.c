@@ -153,7 +153,7 @@ static void download_started(WebKitWebContext *ctx, WebKitDownload *d, gpointer 
     /* say so without taking over the page; the Downloads tab lists it */
     BrowserWindow *bw = browser_window_get_active();
     if (bw) {
-        char *msg = g_strdup_printf("Downloading %s (Ctrl+J shows downloads)", t->name);
+        char *msg = g_strdup_printf("Downloading %s", t->name);
         browser_window_flash_status(bw, msg);
         g_free(msg);
     }

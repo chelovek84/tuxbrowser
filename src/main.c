@@ -10,6 +10,31 @@ static void quit_activated(GSimpleAction *a, GVariant *p, gpointer app)
     browsers_quit();
 }
 
+/* ☰ → Light Theme / Dark Theme: one setting for all windows */
+static void theme_changed(GSimpleAction *a, GVariant *state, gpointer app)
+{
+    const char *t = g_variant_get_string(state, NULL);
+    if (!g_str_equal(t, "light") && !g_str_equal(t, "dark")) return;
+    g_simple_action_set_state(a, state);
+    pref_set_string("theme", t);
+    prefs_save();
+    theme_apply();
+}
+
+/* ☰ → Block Ads */
+static void adblock_changed(GSimpleAction *a, GVariant *state, gpointer app)
+{
+    g_simple_action_set_state(a, state);
+    if (g_variant_get_boolean(state) != pref_get_bool("adblock")) adblock_set_enabled(g_variant_get_boolean(state));
+}
+
+/* keeps the menu check in step when Preferences changes the setting */
+static void adblock_event(gpointer app)
+{
+    GAction *a = g_action_map_lookup_action(G_ACTION_MAP(app), "adblock");
+    if (a) g_simple_action_set_state(G_SIMPLE_ACTION(a), g_variant_new_boolean(pref_get_bool("adblock")));
+}
+
 static void set_accels(GtkApplication *app)
 {
     static const struct { const char *action; const char *accels[5]; } map[] = {
@@ -71,10 +96,21 @@ static void on_startup(GApplication *app, gpointer data)
     watchdog_start();
     profile_init();
     web_init();
+    adblock_init();
     theme_load();
-    static const GActionEntry app_actions[] = { { "quit", quit_activated } };
+    static const GActionEntry app_actions[] = {
+        { "quit", quit_activated },
+        { "theme", NULL, "s", "'light'", theme_changed },
+        { "adblock", NULL, NULL, "true", adblock_changed },
+    };
     g_action_map_add_action_entries(G_ACTION_MAP(app), app_actions, G_N_ELEMENTS(app_actions), app);
     set_accels(GTK_APPLICATION(app));
+    char *theme = pref_get_string("theme");
+    g_simple_action_set_state(G_SIMPLE_ACTION(g_action_map_lookup_action(G_ACTION_MAP(app), "theme")),
+                              g_variant_new_string(g_str_equal(theme, "dark") ? "dark" : "light"));
+    g_free(theme);
+    adblock_event(app);
+    profile_connect(EV_ADBLOCK, adblock_event, app);
     g_object_set(gtk_settings_get_default(), "gtk-menu-images", TRUE, NULL);
 }
 

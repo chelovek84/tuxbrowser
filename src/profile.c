@@ -15,6 +15,9 @@ static GList *listeners[EV_LAST];
 
 static const struct { const char *key, *val; } default_strings[] = {
     { "startup",        "session" },        /* session | start */
+    { "theme",          "light" },          /* light | dark */
+    { "adblock_lists",  ADBLOCK_DEFAULT_LISTS },   /* filter list URLs, one per line */
+    { "adblock_allow",  "" },               /* sites where ads are allowed, one per line */
     { "search_engine",  "Google" },
     { "download_dir",   "" },
     { "user_agent",     "" },
@@ -26,6 +29,7 @@ static const struct { const char *key, *val; } default_strings[] = {
 };
 static const struct { const char *key; gboolean val; } default_bools[] = {
     { "mouse_gestures",      TRUE },
+    { "adblock",             TRUE },
     { "load_images",         TRUE },
     { "enable_javascript",   TRUE },
     { "smooth_scrolling",    TRUE },
@@ -36,6 +40,8 @@ static const struct { const char *key; gboolean val; } default_bools[] = {
 };
 static const struct { const char *key; int val; } default_ints[] = {
     { "default_zoom",       100 },
+    { "adblock_updated",    0 },            /* when the lists were last downloaded (unix time) */
+    { "adblock_rule_count", 0 },
     { "window_width",       1200 },
     { "window_height",      800 },
 };

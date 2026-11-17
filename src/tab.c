@@ -42,6 +42,7 @@ void tab_load(Tab *tab, const char *uri)
     if (!g_str_has_prefix(uri, "javascript:")) {
         g_free(tab->requested);
         tab->requested = g_strdup(uri);
+        adblock_page_changed(tab->ucm, uri);   /* ad blocking on/off for the site, before the load starts */
     }
     if (g_str_has_prefix(uri, "javascript:")) {
         char *code = g_uri_unescape_string(uri + 11, NULL);
@@ -203,6 +204,9 @@ static void on_zoom(WebKitWebView *v, GParamSpec *p, Tab *tab)
 
 static void on_load_changed(WebKitWebView *v, WebKitLoadEvent ev, Tab *tab)
 {
+    /* ad blocking on or off for this site, before the page asks for its resources */
+    if (ev == WEBKIT_LOAD_STARTED || ev == WEBKIT_LOAD_REDIRECTED || ev == WEBKIT_LOAD_COMMITTED)
+        adblock_page_changed(tab->ucm, webkit_web_view_get_uri(v));
     if (ev == WEBKIT_LOAD_COMMITTED && tab->replacing && !g_str_has_prefix(webkit_web_view_get_uri(v) ? webkit_web_view_get_uri(v) : "", START_URI))
         tab->replacing = FALSE;     /* the link has taken over from the start page */
     if (ev == WEBKIT_LOAD_FINISHED)
@@ -407,6 +411,15 @@ static gboolean on_context_menu(WebKitWebView *v, WebKitContextMenu *menu, GdkEv
             g_free(l);
         }
     }
+    /* ad blocking: pick an element to hide, or switch it off/on for this site */
+    char *site = adblock_site_for_uri(tab_get_uri(tab));
+    if (site && pref_get_bool("adblock") && !(ctx & WEBKIT_HIT_TEST_RESULT_CONTEXT_EDITABLE)) {
+        gboolean allowed = adblock_site_is_allowed(tab_get_uri(tab));
+        webkit_context_menu_append(menu, webkit_context_menu_item_new_separator());
+        if (!allowed) add_action_item(menu, -1, bw, "block-element", "Bloc_k Element...", NULL);
+        add_action_item(menu, -1, bw, "adblock-site", allowed ? "Block _Ads on This Site" : "Allow _Ads on This Site", NULL);
+    }
+    g_free(site);
     if (!(ctx & (WEBKIT_HIT_TEST_RESULT_CONTEXT_LINK | WEBKIT_HIT_TEST_RESULT_CONTEXT_IMAGE |
                  WEBKIT_HIT_TEST_RESULT_CONTEXT_MEDIA | WEBKIT_HIT_TEST_RESULT_CONTEXT_EDITABLE |
                  WEBKIT_HIT_TEST_RESULT_CONTEXT_SELECTION)) && !tab_is_start_page(tab)) {
@@ -598,6 +611,7 @@ static gboolean spare_create(gpointer data)
     }
     spare_ucm = webkit_user_content_manager_new();
     webkit_user_content_manager_register_script_message_handler(spare_ucm, "start");
+    adblock_attach(spare_ucm);
     spare_view = create_view(NULL, spare_ucm);
     webkit_web_view_load_uri(spare_view, START_URI);
     return G_SOURCE_REMOVE;
@@ -629,6 +643,7 @@ Tab *tab_new_full(BrowserWindow *bw, WebKitWebView *related, gboolean want_start
     } else {
         tab->ucm = webkit_user_content_manager_new();
         webkit_user_content_manager_register_script_message_handler(tab->ucm, "start");
+        adblock_attach(tab->ucm);
         tab->view = create_view(related, tab->ucm);
     }
     g_signal_connect(tab->ucm, "script-message-received::start", G_CALLBACK(on_script_message), tab);

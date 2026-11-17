@@ -137,15 +137,15 @@ static void open_private_data(GtkButton *b, GtkWindow *parent)
 #define UA_WEBKIT "webkit"
 
 static const struct { const char *id, *label, *ua; } ua_presets[] = {
-    { "chrome-linux",   "Chrome on Linux (default)", DEFAULT_USER_AGENT },
+    { "safari-mac",     "Safari on macOS (default)", DEFAULT_USER_AGENT },
+    { "chrome-linux",   "Chrome on Linux",
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36" },
     { "chrome-windows", "Chrome on Windows",
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36" },
     { "edge-windows",   "Edge on Windows",
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36 Edg/155.0.0.0" },
     { "firefox-linux",  "Firefox on Linux",
       "Mozilla/5.0 (X11; Linux x86_64; rv:158.0) Gecko/20100101 Firefox/158.0" },
-    { "safari-mac",     "Safari on macOS",
-      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Safari/605.1.15" },
     { "chrome-android", "Chrome on Android (mobile sites)",
       "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36" },
     { UA_WEBKIT,        "WebKitGTK (engine's own)", NULL },   /* filled in at runtime */
@@ -180,6 +180,77 @@ static void ua_combo_changed(GtkComboBox *combo, GtkEntry *entry)
     for (guint i = 0; i < G_N_ELEMENTS(ua_presets); i++)
         if (g_str_equal(id, ua_presets[i].id)) gtk_entry_set_text(entry, ua_preset_string(i));
     gtk_editable_set_editable(GTK_EDITABLE(entry), FALSE);   /* shown for reference only */
+}
+
+/* ---------------------------------------------------------------- */
+/* Ad Blocking page helpers                                          */
+
+/* a multi-line text field in a frame; the text view is kept as data "view" */
+static GtkWidget *text_area(const char *text, gboolean mono, int height)
+{
+    GtkWidget *tv = gtk_text_view_new();
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(tv), mono);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(tv), mono ? GTK_WRAP_NONE : GTK_WRAP_WORD_CHAR);
+    gtk_text_view_set_left_margin(GTK_TEXT_VIEW(tv), 4);
+    gtk_text_view_set_top_margin(GTK_TEXT_VIEW(tv), 2);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(tv)), text ? text : "", -1);
+    GtkWidget *sw = gtk_scrolled_window_new(NULL, NULL);
+    gtk_scrolled_window_set_shadow_type(GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN);
+    gtk_widget_set_size_request(sw, -1, height);
+    gtk_widget_set_hexpand(sw, TRUE);
+    gtk_container_add(GTK_CONTAINER(sw), tv);
+    g_object_set_data(G_OBJECT(sw), "view", tv);
+    return sw;
+}
+
+static char *text_area_get(GtkWidget *sw)
+{
+    GtkTextBuffer *b = gtk_text_view_get_buffer(GTK_TEXT_VIEW(g_object_get_data(G_OBJECT(sw), "view")));
+    GtkTextIter a, e;
+    gtk_text_buffer_get_bounds(b, &a, &e);
+    return gtk_text_buffer_get_text(b, &a, &e, FALSE);
+}
+
+static GtkWidget *hint_label(const char *text)
+{
+    GtkWidget *l = gtk_label_new(text);
+    gtk_label_set_xalign(GTK_LABEL(l), 0);
+    gtk_label_set_line_wrap(GTK_LABEL(l), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(l), 70);
+    gtk_style_context_add_class(gtk_widget_get_style_context(l), "dim-label");
+    return l;
+}
+
+static void adblock_status_changed(gpointer label)
+{
+    gtk_label_set_text(GTK_LABEL(label), adblock_status());
+    GtkWidget *btn = g_object_get_data(G_OBJECT(label), "button");
+    if (btn) gtk_widget_set_sensitive(btn, !adblock_updating());
+}
+
+static void adblock_status_gone(GtkWidget *label, gpointer data) { profile_disconnect_data(label); }
+
+/* one address per line, blank lines and spaces dropped */
+static char *clean_lines(const char *text)
+{
+    char **ls = g_strsplit_set(text, " \n\t,", -1);
+    GString *o = g_string_new(NULL);
+    for (char **l = ls; *l; l++) {
+        if (!**l) continue;
+        if (o->len) g_string_append_c(o, '\n');
+        g_string_append(o, *l);
+    }
+    g_strfreev(ls);
+    return g_string_free(o, FALSE);
+}
+
+static void adblock_update_clicked(GtkButton *b, GtkWidget *lists)
+{
+    char *l = text_area_get(lists), *c = clean_lines(l);
+    pref_set_string("adblock_lists", c);   /* update from what is in the field now */
+    g_free(l);
+    g_free(c);
+    adblock_update_lists();
 }
 
 /* ---------------------------------------------------------------- */
@@ -445,8 +516,70 @@ void prefs_dialog_show(GtkWindow *parent)
     gtk_grid_attach(GTK_GRID(g), pd, 0, r++, 2, 1);
     gtk_notebook_append_page(GTK_NOTEBOOK(nb), g, gtk_label_new("Advanced"));
 
+    /* Ad Blocking */
+    g = page_grid();
+    r = 0;
+    GtkWidget *ab_on = gtk_check_button_new_with_mnemonic("_Block ads");
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ab_on), pref_get_bool("adblock"));
+    gtk_grid_attach(GTK_GRID(g), ab_on, 0, r++, 3, 1);
+    section(g, r++, "Filter lists");
+    gtk_grid_attach(GTK_GRID(g), hint_label("Addresses of lists in Adblock Plus format, one per line, e.g. EasyList or a "
+                                      "list for your language. They are downloaded again every 4 days."), 0, r++, 3, 1);
+    s = pref_get_string("adblock_lists");
+    GtkWidget *ab_lists = text_area(s, TRUE, 60);
+    g_free(s);
+    gtk_grid_attach(GTK_GRID(g), ab_lists, 0, r++, 3, 1);
+    GtkWidget *ab_status = gtk_label_new(adblock_status());
+    gtk_label_set_xalign(GTK_LABEL(ab_status), 0);
+    gtk_label_set_line_wrap(GTK_LABEL(ab_status), TRUE);
+    gtk_widget_set_hexpand(ab_status, TRUE);
+    GtkWidget *ab_update = gtk_button_new_with_mnemonic("_Update Now");
+    gtk_widget_set_halign(ab_update, GTK_ALIGN_END);
+    gtk_widget_set_valign(ab_update, GTK_ALIGN_CENTER);
+    g_object_set_data(G_OBJECT(ab_status), "button", ab_update);
+    gtk_widget_set_sensitive(ab_update, !adblock_updating());
+    g_signal_connect(ab_update, "clicked", G_CALLBACK(adblock_update_clicked), ab_lists);
+    profile_connect(EV_ADBLOCK, adblock_status_changed, ab_status);
+    g_signal_connect(ab_status, "destroy", G_CALLBACK(adblock_status_gone), NULL);
+    gtk_grid_attach(GTK_GRID(g), ab_status, 0, r, 2, 1);
+    gtk_grid_attach(GTK_GRID(g), ab_update, 2, r++, 1, 1);
+    section(g, r++, "Sites where ads are allowed");
+    gtk_grid_attach(GTK_GRID(g), hint_label("One site per line; its subdomains are included. A page's right-click menu "
+                                      "also has \u201cAllow Ads on This Site\u201d."), 0, r++, 3, 1);
+    s = pref_get_string("adblock_allow");
+    GtkWidget *ab_allow = text_area(s, TRUE, 50);
+    g_free(s);
+    gtk_grid_attach(GTK_GRID(g), ab_allow, 0, r++, 3, 1);
+    section(g, r++, "Your rules");
+    gtk_grid_attach(GTK_GRID(g), hint_label("In Adblock Plus format. \u201cBlock Element...\u201d in a page's right-click "
+                                      "menu adds a line here (site##element); delete a line to show it again."), 0, r++, 3, 1);
+    s = adblock_get_rules();
+    GtkWidget *ab_rules = text_area(s, TRUE, 80);
+    g_free(s);
+    gtk_grid_attach(GTK_GRID(g), ab_rules, 0, r++, 3, 1);
+    gtk_notebook_append_page(GTK_NOTEBOOK(nb), g, gtk_label_new("Ad Blocking"));
+
     gtk_widget_show_all(d);
-    if (gtk_dialog_run(GTK_DIALOG(d)) == GTK_RESPONSE_OK) {
+    /* quitting while the dialog is open destroys it with its window: notice that */
+    g_object_add_weak_pointer(G_OBJECT(d), (gpointer *)&d);
+    if (gtk_dialog_run(GTK_DIALOG(d)) == GTK_RESPONSE_OK && d) {
+        {   /* ad blocking */
+            char *t = text_area_get(ab_allow), *c = clean_lines(t);
+            adblock_set_allowed_sites(c);
+            g_free(t); g_free(c);
+            t = text_area_get(ab_rules);
+            adblock_set_rules(t);
+            g_free(t);
+            t = text_area_get(ab_lists);
+            c = clean_lines(t);
+            char *old = pref_get_string("adblock_lists");
+            gboolean lists_changed = g_strcmp0(old, c) != 0;
+            pref_set_string("adblock_lists", c);
+            g_free(old); g_free(t); g_free(c);
+            gboolean on = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(ab_on));
+            if (on != pref_get_bool("adblock")) adblock_set_enabled(on);
+            if (lists_changed && on) adblock_update_lists();
+        }
         pref_set_string("startup", gtk_combo_box_get_active_id(GTK_COMBO_BOX(startup)));
         char *dir = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dldir));
         if (dir) pref_set_string("download_dir", dir);
@@ -483,7 +616,10 @@ void prefs_dialog_show(GtkWindow *parent)
     }
     g_list_free(checks);
     g_object_unref(se_store);
-    gtk_widget_destroy(d);
+    if (d) {
+        g_object_remove_weak_pointer(G_OBJECT(d), (gpointer *)&d);
+        gtk_widget_destroy(d);
+    }
 }
 
 /* ---------------------------------------------------------------- */

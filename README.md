@@ -4,7 +4,7 @@ A fast, lightweight web browser written in C on WebKitGTK.
 
 ## Build
 
-    sudo apt install libwebkit2gtk-4.1-dev build-essential
+    sudo apt install libwebkit2gtk-4.1-dev libsoup-3.0-dev build-essential
     make
     ./tuxbrowser [url-or-search ...]
 
@@ -14,12 +14,12 @@ A fast, lightweight web browser written in C on WebKitGTK.
 
 - The address bar sits in the window title bar, sharing a row with the window buttons:
   the tab bar toggle in the top-left corner (full height, so it can be hit without looking), the ☰ menu,
-  back/forward/reload, the zoom button, the address/search box, the ★ bookmarks bar toggle, then the window controls.
+  back/forward/reload, the zoom button, the address/search box, the downloads button, the ★ bookmarks bar toggle, then the window controls.
   The window icon and window menu are left out of the title bar so nothing sits left of the toggle. This layout is
   fixed; there is no separate toolbar row.
 - **☰ menu** button: one short flat list with only what has no button of its own — New Window;
-  History, Downloads; Find, Print, Save Page As, Open File, Full Screen, Developer Tools;
-  Preferences, Delete Private Data; Keyboard Shortcuts, About. Ctrl+Q quits (closes all windows). Tabs are managed in the tab
+  History, Downloads; Find, Print, Save Page As, Open File, Full Screen, Developer Tools; Block Ads;
+  Light Theme / Dark Theme; Preferences, Delete Private Data; Keyboard Shortcuts, About. Ctrl+Q quits (closes all windows). Tabs are managed in the tab
   bar and its right-click menu, bookmarks in the bookmarks bar, zoom with the zoom button, and
   images, JavaScript and mouse gestures in Preferences. There is no menu bar.
 - **Vertical tab bar** on the left, toggled with the title bar button or **F9**. It slides
@@ -51,11 +51,32 @@ A fast, lightweight web browser written in C on WebKitGTK.
 - No status bar. A link's address shows in a small label over the bottom-left corner of the page
   while the mouse is on the link, as do short messages ("Bookmark added"). Loading progress is shown
   in the address bar.
-- **History** (☰ → History, **Ctrl+H**) and **Downloads** (☰ → Downloads, **Ctrl+J**) drop down as
-  popups under the ☰ button (from the top of the page in full screen). History is grouped by day and
-  has a search field; Del deletes the selected entry. Double-click an entry to open it in the current
-  tab (the popup closes), middle-click for a background tab. Press the shortcut again or Esc to close.
-  Starting a download shows a short message; the Downloads popup lists it.
+- **History** (☰ → History, **Ctrl+H**) drops down as a popup under the ☰ button, **Downloads**
+  (the downloads button next to the address bar, ☰ → Downloads, **Ctrl+J**) under its button; in full
+  screen both drop from the top of the page. History is grouped by day and has a search field; Del
+  deletes the selected entry. Double-click an entry to open it in the current tab (the popup closes),
+  middle-click for a background tab. Press the shortcut again or Esc to close.
+- **Downloads button:** while something downloads, a ring around its icon fills up with the overall
+  progress (a turning arc when the size isn't known); the tooltip shows how many and the percentage.
+- **Ad blocking** (on by default; ☰ → Block Ads switches it off and on), working like the VIA
+  browser's:
+  - **Filter lists** in Adblock Plus format, EasyList by default. They are downloaded on first use and
+    again every 4 days; Preferences → Ad Blocking takes more list addresses (e.g. a list for your
+    language) and has Update Now. The lists are turned into WebKit content blocker rules, so ads are
+    blocked in the network layer and hidden elements never flash on screen. The compiled rules are
+    cached, so starting the browser doesn't recompile them.
+  - **Block Element...** in a page's right-click menu: the element you right-clicked is highlighted;
+    move the mouse to pick another, use the wheel or ↑/↓ to widen or narrow to the surrounding area,
+    click to block it, Esc to cancel. It is hidden on that site from then on.
+  - **Allow Ads on This Site** / **Block Ads on This Site** in the right-click menu; the list of
+    allowed sites can be edited in Preferences.
+  - **Your rules** (Preferences → Ad Blocking): your own lines in Adblock Plus format, including the
+    elements you blocked; delete a line to show an element again.
+  - Not supported from the lists: scriptlets, `$redirect`/`$csp`/`$removeparam` and other rewriting
+    options, regular-expression rules and extended CSS (`:has-text()`, `:xpath()`...). These lines are
+    skipped.
+- **Light and dark theme** for the browser's own window (☰ → Light Theme / Dark Theme, light by
+  default). In the dark theme the start page and pages that support it are dark too.
 - Address bar: shows load progress inside the field, a padlock and site info, a bookmark
   star, and completion from bookmarks and history. **Shift+Enter** opens the address in a
   new tab.
@@ -70,9 +91,12 @@ A fast, lightweight web browser written in C on WebKitGTK.
   ready in the background. Ctrl+T shows a finished page in about 10 ms instead of ~0.7 s, and
   links opened in a new tab (middle/Ctrl+click, "Open in New Tab", bookmarks, history) start
   loading within ~20 ms instead of 0.15-0.6 s. The start page is replaced, not kept in Back history.
-- Identifies as **Chrome on Linux** by default, so sites serve their full desktop version. A
-  different one can be picked in Preferences → Web Pages: Chrome/Edge on Windows, Firefox on
-  Linux, Safari on macOS, Chrome on Android (mobile sites), WebKitGTK's own, or a custom string.
+- Identifies as **Safari on macOS** by default. The engine is WebKit, the same as Safari's, so sites
+  send code made for it, video sites pick formats it plays, and sign-in and bot checks see an identity
+  that matches the browser. Sites serve their full desktop version. Some may offer Mac downloads or show
+  ⌘ in shortcut hints. A different one can be picked in Preferences → Web Pages: Chrome on Linux,
+  Chrome/Edge on Windows, Firefox on Linux, Chrome on Android (mobile sites), WebKitGTK's own, or a
+  custom string.
 - Asks sites for **your system languages** (from `LANGUAGE`/`LANG`, e.g. `en-US, en`). A different
   language can be picked in Preferences → Web Pages → Languages, like the user agent: System default,
   a list of common languages (each with English as a fallback, e.g. `de-DE, de, en`), or Custom...,
@@ -131,7 +155,8 @@ stderr, including the decoder each format will use. They take effect when Tux Br
 - Settings: `~/.config/tuxbrowser/settings.ini`
 - Optional CSS overrides for the chrome: `~/.config/tuxbrowser/user.css`
 - Data: `~/.local/share/tuxbrowser/` (`bookmarks.tsv`, `history.sqlite`,
-  `session.ini`, cookies). Files from older versions (`notes.tsv`, `speeddial.tsv`, `thumbnails/`) are
+  `session.ini`, cookies, `adblock-lists.txt` (the downloaded filter lists), `adblock-rules.txt` (your
+  rules)). Compiled ad blocking rules are cached in `~/.cache/tuxbrowser/adblock/`. Files from older versions (`notes.tsv`, `speeddial.tsv`, `thumbnails/`) are
   no longer used and can be deleted.
 - Set `TUXBROWSER_PROFILE=/some/dir` to use a separate profile. It runs as its own instance, next to a
   normal Tux Browser window.

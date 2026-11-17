@@ -1,4 +1,4 @@
-/* History and Downloads popups: popovers that drop down from the main menu button. */
+/* History and Downloads popups: popovers that drop down from the title bar. */
 #include "tuxbrowser.h"
 #include <string.h>
 
@@ -455,8 +455,9 @@ static Popup *popup_new(BrowserWindow *bw, gboolean history)
     return p;
 }
 
-/* Shows (or hides, if it is already up) one of the window's popups. It drops down from
- * the menu button; in full screen, where the title bar is hidden, from the top of the page. */
+/* Shows (or hides, if it is already up) one of the window's popups. History drops down
+ * from the menu button, Downloads from its own button; in full screen, where the title bar
+ * is hidden, both drop from the top of the page. */
 static void popup_toggle(BrowserWindow *bw, gboolean history)
 {
     const char *key = history ? "history-popup" : "downloads-popup";
@@ -469,10 +470,10 @@ static void popup_toggle(BrowserWindow *bw, gboolean history)
         gtk_popover_popdown(GTK_POPOVER(p->popover));
         return;
     }
-    if (gtk_widget_is_drawable(bw->menu_button)) {
-        GdkRectangle r = { 0, 0, gtk_widget_get_allocated_width(bw->menu_button),
-                           gtk_widget_get_allocated_height(bw->menu_button) };
-        gtk_popover_set_relative_to(GTK_POPOVER(p->popover), bw->menu_button);
+    GtkWidget *anchor = history ? bw->menu_button : bw->downloads_btn;
+    if (gtk_widget_is_drawable(anchor)) {
+        GdkRectangle r = { 0, 0, gtk_widget_get_allocated_width(anchor), gtk_widget_get_allocated_height(anchor) };
+        gtk_popover_set_relative_to(GTK_POPOVER(p->popover), anchor);
         gtk_popover_set_pointing_to(GTK_POPOVER(p->popover), &r);
     } else {
         GdkRectangle r = { gtk_widget_get_allocated_width(bw->content_box) / 2, 0, 1, 1 };

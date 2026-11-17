@@ -68,6 +68,9 @@ static const char *CSS =
 
 /* ---- bookmarks bar ---- */
 
+/* ---- downloads button: a nav button whose icon gets a progress ring while downloading ---- */
+"#downloads-button image { color: #2b3846; }"
+"#downloads-button.active image, #downloads-button .downloads-ring { color: #2f6fd0; }"
 /* ---- History and Downloads popups ---- */
 ".tux-popup label { color: #1d2733; }"
 ".tux-popup label.dim-label { color: #5b6672; }"
@@ -153,6 +156,79 @@ static const char *CSS =
 "#vbookmarks treeview.view { color: #1d2733; }"
 "#vbookmarks treeview.view:selected { background-color: #d3dff1; color: #000; }";
 
+/* Dark theme: loaded on top of the light one (same selectors, dark colours). GTK's own
+ * widgets (dialogs, menus, popovers, lists) follow through gtk-application-prefer-dark-theme,
+ * which WebKit also reports to pages as prefers-color-scheme: dark. */
+static const char *DARK_CSS =
+"#main-menu > image, #addressbar button.nav-button > image, #vtabs-button > image, #vbm-button > image,"
+"  #downloads-button image, #newtab-button > image, #trash-button > image { color: #d5dbe1; }"
+"#downloads-button.active image, #downloads-button .downloads-ring { color: #6ea0e8; }"
+"#main-menu:hover, #addressbar button.nav-button:hover, #tabtitlebar button.titlebutton:hover,"
+"  #toolrow #vtabs-button:hover {"
+"  border-color: #5a6672; background-image: linear-gradient(#46505b, #3a434d); }"
+"#main-menu:checked, #main-menu:active, #addressbar button.nav-button:active, #vbm-button:checked,"
+"  #toolrow #vtabs-button:checked, #vtabs-button:checked {"
+"  border-color: #5a6672; background-image: linear-gradient(#2a3037, #353c44); box-shadow: inset 0 1px 2px rgba(0,0,0,.4); }"
+"#addressbar button.nav-button:disabled > image { color: #6b757f; }"
+"#addressbar { background-image: linear-gradient(#353b42, #2c3137); border-bottom-color: #1b1f23; }"
+"#address { background-color: #1f2328; color: #e3e7eb; border-color: #555f6a; box-shadow: inset 0 1px 2px rgba(0,0,0,.4); }"
+"#address image { color: #aab3bc; }"
+"#address progress { background-image: linear-gradient(#2f4a6e, #284061); }"
+"#tabtitlebar { background-image: linear-gradient(#383e45, #2b3036); box-shadow: inset 0 -1px #1b1f23, inset 0 1px rgba(255,255,255,.06); }"
+"#tabtitlebar:backdrop { background-image: linear-gradient(#30353b, #2a2f34); }"
+"#tabtitlebar button.titlebutton { color: #d5dbe1; }"
+"#toolrow { background-image: linear-gradient(#353b42, #2c3137); border-bottom-color: #1b1f23; }"
+"#findbar { background-image: linear-gradient(#353b42, #2c3137); border-top-color: #1b1f23; }"
+"#findbar label, #findbar check + label, #findbar checkbutton label { color: #e3e7eb; }"
+"#status-float { background-color: rgba(40,45,51,.97); border-color: #4a535d; }"
+"#status-float label { color: #e3e7eb; }"
+".tux-popup label, .tux-popup .popup-header button { color: #e3e7eb; }"
+".tux-popup label.dim-label { color: #9aa4ae; }"
+"button.tab-close { color: #aab3bc; }"
+"#vtabs, #vtabs scrolledwindow, #vtabs viewport, #vtabs list { background-color: #2a2f35; }"
+"#vtabs { border-right-color: #1b1f23; box-shadow: 3px 0 10px rgba(0,0,0,.5); }"
+"#vtabs .vtabs-header, #vbookmarks .vbar-header { background-image: linear-gradient(#383e45, #2f353b); border-bottom-color: #1b1f23; }"
+"#vtabs .vtabs-header > label, #vbookmarks .vbar-header > label { color: #e3e7eb; }"
+"#vtabs .vtabs-header > button > image, #vbookmarks .vbar-header > button > image { color: #d5dbe1; }"
+"#vtabs row { border-bottom-color: rgba(255,255,255,.05); }"
+"#vtabs row:hover { background-color: #343a41; }"
+"#vtabs row:selected { background-image: linear-gradient(#3d4550, #343b44); border-left-color: #5b8fd9; }"
+"#vtabs row > box > label { color: #d5dbe1; }"
+"#vtabs row:selected > box > label { color: #fff; }"
+"#vstrip { background-color: #262a30; border-right-color: #1b1f23; }"
+"#vstrip button.vstrip-tab:hover, #vstrip button.vstrip-add:hover { background-color: #343a41; }"
+"#vstrip button.vstrip-tab.current { background-color: #3a414a; border-left-color: #5b8fd9;"
+"  box-shadow: inset 0 1px 0 rgba(0,0,0,.3), inset 0 -1px 0 rgba(0,0,0,.3); }"
+"#vstrip .vstrip-tab image, #vstrip .vstrip-add image { color: #c3cad1; }"
+"#vstrip button.vstrip-add { border-bottom-color: #1b1f23; }"
+"#vbookmarks, #vbookmarks scrolledwindow, #vbookmarks viewport, #vbookmarks treeview.view { background-color: #2a2f35; }"
+"#vbookmarks { border-left-color: #1b1f23; box-shadow: -3px 0 10px rgba(0,0,0,.5); }"
+"#vbookmarks .vbar-search { border-bottom-color: #1b1f23; }"
+"#vbookmarks treeview.view { color: #d5dbe1; }"
+"#vbookmarks treeview.view:selected { background-color: #3d4f69; color: #fff; }";
+
+static GtkCssProvider *dark_provider;
+
+/* "light" (default) or "dark"; called at start and whenever the setting changes */
+void theme_apply(void)
+{
+    char *t = pref_get_string("theme");
+    gboolean dark = g_str_equal(t, "dark");
+    g_free(t);
+    g_object_set(gtk_settings_get_default(), "gtk-application-prefer-dark-theme", dark, NULL);
+    GdkScreen *scr = gdk_screen_get_default();
+    if (dark && !dark_provider) {
+        dark_provider = gtk_css_provider_new();
+        gtk_css_provider_load_from_data(dark_provider, DARK_CSS, -1, NULL);
+        /* above the light theme, below the user's own user.css */
+        gtk_style_context_add_provider_for_screen(scr, GTK_STYLE_PROVIDER(dark_provider),
+                                                  GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+    } else if (!dark && dark_provider) {
+        gtk_style_context_remove_provider_for_screen(scr, GTK_STYLE_PROVIDER(dark_provider));
+        g_clear_object(&dark_provider);
+    }
+}
+
 void theme_load(void)
 {
     GtkCssProvider *p = gtk_css_provider_new();
@@ -175,4 +251,5 @@ void theme_load(void)
         g_object_unref(u);
     }
     g_free(path);
+    theme_apply();
 }
