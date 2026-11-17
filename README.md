@@ -116,8 +116,9 @@ A fast, lightweight web browser written in C on WebKitGTK.
   Holding the right button and turning the wheel cycles tabs. Holding the right button
   and clicking left goes back.
 - **Graphics memory use** (Preferences → Advanced → Performance, applies after a restart). In *Low*
-  mode pages are painted by the CPU and video frames don't go through OpenGL, which keeps video memory
-  free for the desktop and other programs. *Automatic* picks Low for cards on the old `radeon` driver and
+  mode pages are painted by the CPU without compositing (unless Hardware acceleration is set to
+  *Always*) and video frames don't go through OpenGL, which keeps video memory free for the desktop
+  and other programs. *Automatic* picks Low for cards on the old `radeon` driver and
   for cards with 1 GB of video memory or less. On such cards, running out of video memory shows up as
   freezing windows, corrupted video, and blank video in other browsers.
 - **Video decoding** (Preferences → Advanced → Performance, applies after a restart): *Software*
