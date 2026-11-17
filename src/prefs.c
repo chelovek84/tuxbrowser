@@ -639,9 +639,10 @@ void private_data_dialog_show(GtkWindow *parent)
     GtkWidget *cache = gtk_check_button_new_with_mnemonic("C_ache");
     GtkWidget *other = gtk_check_button_new_with_mnemonic("_Local storage and site databases");
     GtkWidget *dl = gtk_check_button_new_with_mnemonic("_Finished transfers list");
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(hist), TRUE);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(cache), TRUE);
-    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(dl), TRUE);
+    /* everything is selected to start with; untick what should stay */
+    GtkWidget *all[] = { hist, cook, cache, other, dl };
+    for (guint i = 0; i < G_N_ELEMENTS(all); i++)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(all[i]), TRUE);
     gtk_box_pack_start(GTK_BOX(box), hist, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), cook, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), cache, FALSE, FALSE, 0);
@@ -649,14 +650,18 @@ void private_data_dialog_show(GtkWindow *parent)
     gtk_box_pack_start(GTK_BOX(box), dl, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(d))), box, TRUE, TRUE, 0);
     gtk_widget_show_all(d);
-    if (gtk_dialog_run(GTK_DIALOG(d)) == GTK_RESPONSE_OK) {
+    g_object_add_weak_pointer(G_OBJECT(d), (gpointer *)&d);   /* quitting destroys it with its window */
+    if (gtk_dialog_run(GTK_DIALOG(d)) == GTK_RESPONSE_OK && d) {
         web_clear_private_data(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(hist)),
                                gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cook)),
                                gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(cache)),
                                gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(other)));
         if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(dl))) transfers_clear_finished();
     }
-    gtk_widget_destroy(d);
+    if (d) {
+        g_object_remove_weak_pointer(G_OBJECT(d), (gpointer *)&d);
+        gtk_widget_destroy(d);
+    }
 }
 
 /* ---------------------------------------------------------------- */
@@ -708,8 +713,9 @@ void bookmark_edit_dialog(GtkWindow *parent, const char *url, const char *title,
     gtk_widget_show_all(d);
 
     char *old = g_strdup(url);
+    g_object_add_weak_pointer(G_OBJECT(d), (gpointer *)&d);   /* quitting destroys it with its window */
     int r = gtk_dialog_run(GTK_DIALOG(d));
-    if (r == GTK_RESPONSE_OK) {
+    if (r == GTK_RESPONSE_OK && d) {
         char *nu = browser_resolve_input(gtk_entry_get_text(GTK_ENTRY(eu)));
         const char *nt = gtk_entry_get_text(GTK_ENTRY(en));
         char *nf = g_strstrip(g_strdup(gtk_entry_get_text(GTK_ENTRY(fe))));
@@ -723,5 +729,8 @@ void bookmark_edit_dialog(GtkWindow *parent, const char *url, const char *title,
         bookmark_remove(old);
     }
     g_free(old);
-    gtk_widget_destroy(d);
+    if (d) {
+        g_object_remove_weak_pointer(G_OBJECT(d), (gpointer *)&d);
+        gtk_widget_destroy(d);
+    }
 }
