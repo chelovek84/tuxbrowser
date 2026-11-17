@@ -1,4 +1,4 @@
-/* Browser window: title bar with address bar, vertical tab/bookmark bars, panel, status bar. */
+/* Browser window: title bar with address bar, vertical tab/bookmark bars, status label. */
 #include "tuxbrowser.h"
 #include <string.h>
 
@@ -291,7 +291,7 @@ static void vstrip_update_item(GtkWidget *item, Tab *t, gboolean current, int sc
 
 static void vstrip_rebuild(BrowserWindow *bw)
 {
-    if (!bw->vstrip_box || !gtk_widget_get_visible(bw->vstrip)) return;
+    if (!bw->vstrip_box || !gtk_widget_get_visible(bw->vstrip)) return;   /* hidden in full screen */
     int scale = gtk_widget_get_scale_factor(bw->vstrip_box);
     GList *tabs = browser_window_tabs_in_order(bw);
     Tab *cur = browser_window_current_tab(bw);
@@ -336,7 +336,7 @@ static gboolean vstrip_refresh_idle(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* favicon changes are shown promptly, without waiting for the slower panel refresh */
+/* favicon changes are shown promptly, without waiting for the slower tab bar refresh */
 void browser_window_tab_icon_changed(BrowserWindow *bw, Tab *tab)
 {
     if (!bw->vstrip_refresh_id) bw->vstrip_refresh_id = g_timeout_add(50, vstrip_refresh_idle, bw);
@@ -893,11 +893,10 @@ static GtkWidget *build_vbookmarks(BrowserWindow *bw)
     return bw->vbm_revealer;
 }
 
-static gboolean refresh_panel_idle(gpointer data)
+static gboolean refresh_tabs_idle(gpointer data)
 {
     BrowserWindow *bw = data;
-    bw->panel_refresh_id = 0;
-    panels_refresh_tabs(bw->panels);
+    bw->tabs_refresh_id = 0;
     vtabs_rebuild(bw);
     return G_SOURCE_REMOVE;
 }
@@ -982,8 +981,8 @@ void browser_window_tab_changed(BrowserWindow *bw, Tab *tab)
 {
     if (browser_window_current_tab(bw) == tab)
         browser_window_update_chrome(bw);
-    if (!bw->panel_refresh_id)
-        bw->panel_refresh_id = g_timeout_add(300, refresh_panel_idle, bw);
+    if (!bw->tabs_refresh_id)
+        bw->tabs_refresh_id = g_timeout_add(300, refresh_tabs_idle, bw);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1060,7 +1059,6 @@ void browser_window_close_tab(BrowserWindow *bw, Tab *tab)
     gtk_container_remove(GTK_CONTAINER(bw->content_stack), GTK_WIDGET(tab->view));
     tab_free(tab);
     browser_window_update_chrome(bw);
-    panels_refresh_tabs(bw->panels);
     vtabs_rebuild(bw);
 }
 
@@ -1086,8 +1084,8 @@ static void on_switch_page(GtkNotebook *nb, GtkWidget *child, guint n, BrowserWi
     if (tab_is_start_page(t)) start_page_focus(t);
     else if (!*tab_get_uri(t)) gtk_widget_grab_focus(bw->address);
     else gtk_widget_grab_focus(GTK_WIDGET(t->view));
-    if (!bw->panel_refresh_id)
-        bw->panel_refresh_id = g_timeout_add(100, refresh_panel_idle, bw);
+    if (!bw->tabs_refresh_id)
+        bw->tabs_refresh_id = g_timeout_add(100, refresh_tabs_idle, bw);
 }
 
 static gboolean on_tabbar_press(GtkWidget *w, GdkEventButton *ev, BrowserWindow *bw)
@@ -1179,35 +1177,6 @@ void browser_window_tab_context_menu(BrowserWindow *bw, Tab *tab, GdkEventButton
 }
 
 /* ---------------------------------------------------------------- */
-/* panel                                                             */
-
-void browser_window_show_panel(BrowserWindow *bw, const char *name, gboolean toggle)
-{
-    gboolean shown = gtk_widget_get_visible(bw->panel_box) && gtk_widget_get_visible(bw->panel_stack);
-    const char *cur = gtk_stack_get_visible_child_name(GTK_STACK(bw->panel_stack));
-    if (toggle && shown && g_strcmp0(cur, name) == 0) {
-        gtk_widget_hide(bw->panel_stack);
-        gtk_widget_hide(bw->panel_sep);
-    } else {
-        gtk_widget_show(bw->panel_box);
-        gtk_widget_show(bw->panel_stack);
-        gtk_widget_show(bw->panel_sep);
-        gtk_stack_set_visible_child_name(GTK_STACK(bw->panel_stack), name);
-        gtk_paned_set_position(GTK_PANED(bw->paned), pref_get_int("panel_width"));
-        panels_focus_search(bw->panels, name);
-    }
-    pref_set_bool("show_panel", gtk_widget_get_visible(bw->panel_box));
-}
-
-static void on_paned_position(GObject *o, GParamSpec *p, BrowserWindow *bw)
-{
-    if (gtk_widget_get_visible(bw->panel_stack) && gtk_widget_get_mapped(bw->panel_stack)) {
-        int pos = gtk_paned_get_position(GTK_PANED(bw->paned));
-        if (pos > 120) pref_set_int("panel_width", pos);
-    }
-}
-
-/* ---------------------------------------------------------------- */
 /* fullscreen                                                        */
 
 static void apply_bars(BrowserWindow *bw)
@@ -1215,9 +1184,8 @@ static void apply_bars(BrowserWindow *bw)
     gboolean fs = bw->fullscreen;
     gtk_widget_set_visible(bw->notebook, FALSE);   /* tab model only, never shown */
     gtk_widget_set_visible(bw->toolbar, !fs);
-    gtk_widget_set_visible(bw->panel_box, !fs && pref_get_bool("show_panel"));
     if (bw->vstrip) {
-        gtk_widget_set_visible(bw->vstrip, !fs && pref_get_bool("show_tab_strip"));
+        gtk_widget_set_visible(bw->vstrip, !fs);
         vstrip_rebuild(bw);   /* it is not kept up to date while hidden */
     }
 }
@@ -1247,39 +1215,9 @@ static char *menu_label(const char *s)
     return g_string_free(o, FALSE);
 }
 
-static void rebuild_bookmarks_menu(BrowserWindow *bw)
-{
-    g_menu_remove_all(bw->bookmarks_section);
-    GHashTable *folders = g_hash_table_new(g_str_hash, g_str_equal);
-    for (guint i = 0; i < profile->bookmarks->len; i++) {
-        Bookmark *b = profile->bookmarks->pdata[i];
-        char *l = menu_label(b->title);
-        GMenuItem *it = g_menu_item_new(l, NULL);
-        g_menu_item_set_action_and_target_value(it, "win.open-url", g_variant_new_string(b->url));
-        g_free(l);
-        if (b->folder && *b->folder) {
-            GMenu *sub = g_hash_table_lookup(folders, b->folder);
-            if (!sub) {
-                sub = g_menu_new();
-                g_hash_table_insert(folders, b->folder, sub);
-                char *fl = menu_label(b->folder);
-                g_menu_append_submenu(bw->bookmarks_section, fl, G_MENU_MODEL(sub));
-                g_free(fl);
-                g_object_unref(sub);
-            }
-            g_menu_append_item(sub, it);
-        } else {
-            g_menu_append_item(bw->bookmarks_section, it);
-        }
-        g_object_unref(it);
-    }
-    g_hash_table_destroy(folders);
-}
-
 static void on_bookmarks_changed(gpointer data)
 {
     BrowserWindow *bw = data;
-    rebuild_bookmarks_menu(bw);
     vbm_rebuild(bw);
     browser_window_update_chrome(bw);
 }
@@ -1322,88 +1260,33 @@ static void on_settings_changed(gpointer data)
         g_free(ph);
     }
     apply_bars(bw);
-    GAction *a;
-    const char *toggles[][2] = {
-        { "toggle-images", "load_images" },
-        { "toggle-gestures", "mouse_gestures" }, { "toggle-javascript", "enable_javascript" },
-    };
-    for (guint i = 0; i < G_N_ELEMENTS(toggles); i++)
-        if ((a = g_action_map_lookup_action(G_ACTION_MAP(bw->window), toggles[i][0])))
-            g_simple_action_set_state(G_SIMPLE_ACTION(a), g_variant_new_boolean(pref_get_bool(toggles[i][1])));
 }
 
+/* The main menu holds only what has no button elsewhere: tabs are managed in the tab bar
+ * (and its right-click menu), bookmarks in the bookmarks bar, zoom in the zoom button. */
 static GMenuModel *build_main_menu(BrowserWindow *bw)
 {
     GMenu *root = g_menu_new();
-    GMenu *s, *sub;
-
-#define SUB(label) (sub = g_menu_new(), g_menu_append_submenu(root, label, G_MENU_MODEL(sub)), g_object_unref(sub), sub)
-#define SEC(m) (s = g_menu_new(), g_menu_append_section(m, NULL, G_MENU_MODEL(s)), g_object_unref(s), s)
-
-    /* main menu (burger button) */
-    GMenu *tw = SUB("_Tabs and Windows");
-    s = SEC(tw);
-    g_menu_append(s, "_New Tab", "win.new-tab");
+    GMenu *s;
+#define SEC() do { s = g_menu_new(); g_menu_append_section(root, NULL, G_MENU_MODEL(s)); g_object_unref(s); } while (0)
+    SEC();
     g_menu_append(s, "New _Window", "win.new-window");
-    s = SEC(tw);
-    g_menu_append(s, "_Reopen Closed Tab", "win.reopen-tab");
-    g_menu_append(s, "_Duplicate Tab", "win.duplicate-tab");
-    g_menu_append(s, "Reload _All Tabs", "win.reload-all");
-    g_menu_append(s, "_Vertical Tab Bar", "win.toggle-vtabs");
-    s = SEC(tw);
-    g_menu_append(s, "_Close Tab", "win.close-tab");
-    g_menu_append(s, "Close Win_dow", "win.close-window");
-
-    GMenu *pg = SUB("_Page");
-    s = SEC(pg);
+    SEC();
+    g_menu_append(s, "_History", "win.show-history");
+    g_menu_append(s, "_Downloads", "win.show-downloads");
+    SEC();
     g_menu_append(s, "_Find...", "win.find");
-    g_menu_append(s, "_Open File...", "win.open-file");
-    g_menu_append(s, "_Save As...", "win.save-page");
     g_menu_append(s, "_Print...", "win.print");
-    s = SEC(pg);
-    g_menu_append(s, "_Zoom In", "win.zoom-in");
-    g_menu_append(s, "Zoom O_ut", "win.zoom-out");
-    g_menu_append(s, "_Reset Zoom", "win.zoom-reset");
-    g_menu_append(s, "_Full Screen", "win.fullscreen");
-    s = SEC(pg);
-    g_menu_append(s, "View _Source", "win.view-source");
+    g_menu_append(s, "_Save Page As...", "win.save-page");
+    g_menu_append(s, "_Open File...", "win.open-file");
+    g_menu_append(s, "F_ull Screen", "win.fullscreen");
     g_menu_append(s, "_Developer Tools", "win.inspector");
-
-    GMenu *bm = SUB("_Bookmarks");
-    s = SEC(bm);
-    g_menu_append(s, "_Bookmark Page...", "win.bookmark");
-    g_menu_append(s, "_Manage Bookmarks", "win.panel-bookmarks");
-    g_menu_append(s, "_Vertical Bookmarks Bar", "win.toggle-vbookmarks");
-    g_menu_append_section(bm, NULL, G_MENU_MODEL(bw->bookmarks_section));
-
-    s = SEC(root);
-    g_menu_append(s, "_Downloads", "win.panel-transfers");
-    g_menu_append(s, "_History", "win.panel-history");
-    g_menu_append(s, "_Notes", "win.panel-notes");
-
-    GMenu *st = g_menu_new();
-    g_menu_append_submenu(s, "S_ettings", G_MENU_MODEL(st));
-    g_object_unref(st);
-    GMenu *s1 = SEC(st);
-    g_menu_append(s1, "_Preferences...", "win.preferences");
-    g_menu_append(s1, "_Delete Private Data...", "win.private-data");
-    s1 = SEC(st);
-    g_menu_append(s1, "Enable _Images", "win.toggle-images");
-    g_menu_append(s1, "Enable _JavaScript", "win.toggle-javascript");
-    g_menu_append(s1, "Mouse _Gestures", "win.toggle-gestures");
-    s1 = SEC(st);
-    g_menu_append(s1, "Show _Panel", "win.toggle-panel");
-
-    GMenu *hp = g_menu_new();
-    g_menu_append_submenu(s, "_Help", G_MENU_MODEL(hp));
-    g_object_unref(hp);
-    s1 = SEC(hp);
-    g_menu_append(s1, "_Keyboard Shortcuts", "win.shortcuts");
-    g_menu_append(s1, "_About " APP_NAME, "win.about");
-
-    s = SEC(root);
-    g_menu_append(s, "E_xit", "app.quit");
-#undef SUB
+    SEC();
+    g_menu_append(s, "_Preferences...", "win.preferences");
+    g_menu_append(s, "Delete Private _Data...", "win.private-data");
+    SEC();
+    g_menu_append(s, "_Keyboard Shortcuts", "win.shortcuts");
+    g_menu_append(s, "_About " APP_NAME, "win.about");
 #undef SEC
     return G_MENU_MODEL(root);
 }
@@ -1676,36 +1559,11 @@ static void a_open_file(GSimpleAction *a, GVariant *p, gpointer data)
 }
 static void a_preferences(GSimpleAction *a, GVariant *p, gpointer data) { prefs_dialog_show(GTK_WINDOW(BW->window)); }
 static void a_private_data(GSimpleAction *a, GVariant *p, gpointer data) { private_data_dialog_show(GTK_WINDOW(BW->window)); }
-static void a_toggle_panel(GSimpleAction *a, GVariant *p, gpointer data)
-{
-    BrowserWindow *bw = BW;
-    if (gtk_widget_get_visible(bw->panel_box)) {
-        gtk_widget_hide(bw->panel_box);
-        pref_set_bool("show_panel", FALSE);
-    } else {
-        const char *cur = gtk_stack_get_visible_child_name(GTK_STACK(bw->panel_stack));
-        browser_window_show_panel(bw, cur ? cur : "bookmarks", FALSE);
-    }
-}
-static void a_panel_bookmarks(GSimpleAction *a, GVariant *p, gpointer data) { browser_window_show_panel(BW, "bookmarks", TRUE); }
-static void a_panel_history(GSimpleAction *a, GVariant *p, gpointer data) { browser_window_show_panel(BW, "history", TRUE); }
-static void a_panel_transfers(GSimpleAction *a, GVariant *p, gpointer data) { browser_window_show_panel(BW, "transfers", TRUE); }
-static void a_panel_notes(GSimpleAction *a, GVariant *p, gpointer data) { browser_window_show_panel(BW, "notes", TRUE); }
-static void a_panel_windows(GSimpleAction *a, GVariant *p, gpointer data) { browser_window_show_panel(BW, "windows", TRUE); }
+static void a_show_history(GSimpleAction *a, GVariant *p, gpointer data)   { history_popup_toggle(BW); }
+static void a_show_downloads(GSimpleAction *a, GVariant *p, gpointer data) { downloads_popup_toggle(BW); }
 
-static void toggle_pref(GSimpleAction *a, GVariant *state, const char *key)
-{
-    g_simple_action_set_state(a, state);
-    pref_set_bool(key, g_variant_get_boolean(state));
-    if (g_str_equal(key, "load_images") || g_str_equal(key, "enable_javascript"))
-        web_apply_settings();
-    prefs_save();
-}
-static void s_images(GSimpleAction *a, GVariant *s, gpointer data)     { toggle_pref(a, s, "load_images"); }
-static void s_gestures(GSimpleAction *a, GVariant *s, gpointer data)   { toggle_pref(a, s, "mouse_gestures"); }
-static void s_javascript(GSimpleAction *a, GVariant *s, gpointer data) { toggle_pref(a, s, "enable_javascript"); }
 
-typedef struct { BrowserWindow *bw; gboolean note; char *uri; } SelCtx;
+typedef struct { BrowserWindow *bw; } SelCtx;
 static void selection_ready(GObject *src, GAsyncResult *res, gpointer data)
 {
     SelCtx *c = data;
@@ -1714,40 +1572,28 @@ static void selection_ready(GObject *src, GAsyncResult *res, gpointer data)
         char *text = jsc_value_to_string(v);
         g_strstrip(text);
         if (*text) {
-            if (c->note) {
-                char *body = g_strdup_printf("%s\n\n%s", text, c->uri);
-                Note *n = note_add(body);
-                g_free(body);
-                browser_window_show_panel(c->bw, "notes", FALSE);
-                panels_note_selected(c->bw->panels, n);
-            } else {
-                SearchEngine *e = search_engine_default();
-                if (e) {
-                    char *u = search_url_for(e, text);
-                    browser_window_open(c->bw, u, FALSE);
-                    g_free(u);
-                }
+            SearchEngine *e = search_engine_default();
+            if (e) {
+                char *u = search_url_for(e, text);
+                browser_window_open(c->bw, u, FALSE);
+                g_free(u);
             }
         }
         g_free(text);
     }
     if (v) g_object_unref(v);
-    g_free(c->uri);
     g_free(c);
 }
-static void get_selection(BrowserWindow *bw, gboolean note)
+static void get_selection(BrowserWindow *bw)
 {
     Tab *t = browser_window_current_tab(bw);
     if (!t) return;
     SelCtx *c = g_new0(SelCtx, 1);
     c->bw = bw;
-    c->note = note;
-    c->uri = g_strdup(tab_get_uri(t));
     webkit_web_view_evaluate_javascript(t->view, "window.getSelection().toString()", -1,
                                         NULL, NULL, NULL, selection_ready, c);
 }
-static void a_search_selection(GSimpleAction *a, GVariant *p, gpointer data) { get_selection(BW, FALSE); }
-static void a_note_selection(GSimpleAction *a, GVariant *p, gpointer data) { get_selection(BW, TRUE); }
+static void a_search_selection(GSimpleAction *a, GVariant *p, gpointer data) { get_selection(BW); }
 
 static void a_about(GSimpleAction *a, GVariant *p, gpointer data)
 {
@@ -1769,8 +1615,8 @@ static void a_shortcuts(GSimpleAction *a, GVariant *p, gpointer data)
         { "Ctrl+N", "New window" }, { "F8, Ctrl+L, Alt+D", "Go to address bar" }, { "Ctrl+K, Ctrl+E", "Search (focus address bar)" },
         { "Shift+Enter", "Open address in new tab" }, { "Ctrl+Shift+V", "Paste and go (address bar)" }, { "Alt+Left / Alt+Right", "Back / Forward" },
         { "F5, Ctrl+R", "Reload" }, { "Ctrl+F5", "Reload without cache" },
-        { "Ctrl+D", "Bookmark page" }, { "F4", "Show/hide panel" }, { "F9", "Show/hide vertical tab bar" }, { "F7", "Show/hide vertical bookmarks bar" }, { "Ctrl+Shift+B", "Bookmarks panel" },
-        { "Ctrl+Shift+H, Ctrl+H", "History panel" }, { "Ctrl+J", "Transfers panel" }, { "Ctrl+Shift+N", "Notes panel" },
+        { "Ctrl+D", "Bookmark page" }, { "F9", "Show/hide vertical tab bar" }, { "F7, Ctrl+Shift+B", "Show/hide vertical bookmarks bar" },
+        { "Ctrl+Shift+H, Ctrl+H", "History" }, { "Ctrl+J", "Downloads" },
         { "Ctrl+F", "Find in page" }, { "F3 / Shift+F3", "Find next / previous" },
         { "Ctrl++ / Ctrl+- / Ctrl+0", "Zoom in / out / reset" }, { "F11", "Full screen" },
         { "Ctrl+U", "View source" }, { "Ctrl+Shift+I, F12", "Developer tools" },
@@ -1828,16 +1674,11 @@ static const GActionEntry win_actions[] = {
     { "fullscreen", a_fullscreen }, { "view-source", a_view_source }, { "inspector", a_inspector },
     { "print", a_print }, { "save-page", a_save_page }, { "open-file", a_open_file },
     { "preferences", a_preferences }, { "private-data", a_private_data },
-    { "toggle-panel", a_toggle_panel }, { "panel-bookmarks", a_panel_bookmarks },
-    { "panel-history", a_panel_history }, { "panel-transfers", a_panel_transfers },
-    { "panel-notes", a_panel_notes }, { "panel-windows", a_panel_windows },
-    { "toggle-images", NULL, NULL, "true", s_images },
-    { "toggle-gestures", NULL, NULL, "true", s_gestures },
-    { "toggle-javascript", NULL, NULL, "true", s_javascript },
+    { "show-history", a_show_history }, { "show-downloads", a_show_downloads },
     { "toggle-vtabs", NULL, NULL, "false", s_vtabs },
     { "toggle-vbookmarks", NULL, NULL, "false", s_vbookmarks },
     { "bookmark-edit", a_bookmark_edit, "s" }, { "bookmark-delete", a_bookmark_delete, "s" },
-    { "search-selection", a_search_selection }, { "note-selection", a_note_selection },
+    { "search-selection", a_search_selection },
     { "about", a_about }, { "shortcuts", a_shortcuts },
 };
 
@@ -2268,19 +2109,17 @@ static void on_destroy(GtkWidget *w, BrowserWindow *bw)
     windows = g_list_remove(windows, bw);
     if (!quitting && windows) session_save();
     profile_disconnect_data(bw);
-    if (bw->panel_refresh_id) g_source_remove(bw->panel_refresh_id);
+    if (bw->tabs_refresh_id) g_source_remove(bw->tabs_refresh_id);
     if (bw->vstrip_refresh_id) g_source_remove(bw->vstrip_refresh_id);
     if (bw->vbm_sync_id) g_source_remove(bw->vbm_sync_id);
     if (bw->status_timeout_id) g_source_remove(bw->status_timeout_id);
     if (bw->save_size_id) g_source_remove(bw->save_size_id);
-    panels_free(bw->panels);
     for (GList *l = bw->tabs; l; l = l->next) {
         Tab *t = l->data;
         /* the widgets are being destroyed with the window; just release our refs */
         tab_free(t);
     }
     g_list_free(bw->tabs);
-    g_object_unref(bw->bookmarks_section);
     g_object_unref(bw->trash_menu);
     g_object_unref(bw->completion_store);
     g_free(bw->temp_status);
@@ -2467,7 +2306,6 @@ BrowserWindow *browser_window_new(GtkApplication *app)
     gtk_widget_set_name(GTK_WIDGET(bw->window), "tuxbrowser");
     g_action_map_add_action_entries(G_ACTION_MAP(bw->window), win_actions, G_N_ELEMENTS(win_actions), bw);
 
-    bw->bookmarks_section = g_menu_new();
     bw->trash_menu = g_menu_new();
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
@@ -2562,53 +2400,43 @@ BrowserWindow *browser_window_new(GtkApplication *app)
     gtk_box_pack_start(GTK_BOX(toolrow), bw->toolbar, TRUE, TRUE, 0);
     bw->toolbar = toolrow;   /* hidden as a whole in fullscreen */
 
-    if (pref_get_bool("tabs_in_titlebar")) {
-        /* the address bar lives in the window title bar, next to the window buttons */
-        GtkWidget *hb = gtk_header_bar_new();
-        gtk_widget_set_name(hb, "tabtitlebar");
-        gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(hb), TRUE);
-        gtk_header_bar_set_has_subtitle(GTK_HEADER_BAR(hb), FALSE);
-        /* keep the user's window buttons but drop the window icon and menu, so nothing
-         * sits left of the tab bar toggle (window buttons placed on the left stay there) */
-        char *layout = NULL;
-        g_object_get(gtk_settings_get_default(), "gtk-decoration-layout", &layout, NULL);
-        if (layout && (strstr(layout, "icon") || strstr(layout, "menu"))) {
-            GString *o = g_string_new(NULL);
-            char **sides = g_strsplit(layout, ":", 2);
-            for (int s = 0; sides[s]; s++) {
-                if (s) g_string_append_c(o, ':');
-                char **items = g_strsplit(sides[s], ",", -1);
-                gboolean first = TRUE;
-                for (int i = 0; items[i]; i++) {
-                    g_strstrip(items[i]);
-                    if (g_str_equal(items[i], "icon") || g_str_equal(items[i], "menu") || !*items[i]) continue;
-                    if (!first) g_string_append_c(o, ',');
-                    g_string_append(o, items[i]);
-                    first = FALSE;
-                }
-                g_strfreev(items);
+    /* the address bar lives in the window title bar, next to the window buttons */
+    GtkWidget *hb = gtk_header_bar_new();
+    gtk_widget_set_name(hb, "tabtitlebar");
+    gtk_header_bar_set_show_close_button(GTK_HEADER_BAR(hb), TRUE);
+    gtk_header_bar_set_has_subtitle(GTK_HEADER_BAR(hb), FALSE);
+    /* keep the user's window buttons but drop the window icon and menu, so nothing
+     * sits left of the tab bar toggle (window buttons placed on the left stay there) */
+    char *layout = NULL;
+    g_object_get(gtk_settings_get_default(), "gtk-decoration-layout", &layout, NULL);
+    if (layout && (strstr(layout, "icon") || strstr(layout, "menu"))) {
+        GString *o = g_string_new(NULL);
+        char **sides = g_strsplit(layout, ":", 2);
+        for (int s = 0; sides[s]; s++) {
+            if (s) g_string_append_c(o, ':');
+            char **items = g_strsplit(sides[s], ",", -1);
+            gboolean first = TRUE;
+            for (int i = 0; items[i]; i++) {
+                g_strstrip(items[i]);
+                if (g_str_equal(items[i], "icon") || g_str_equal(items[i], "menu") || !*items[i]) continue;
+                if (!first) g_string_append_c(o, ',');
+                g_string_append(o, items[i]);
+                first = FALSE;
             }
-            g_strfreev(sides);
-            gtk_header_bar_set_decoration_layout(GTK_HEADER_BAR(hb), o->str);
-            g_string_free(o, TRUE);
+            g_strfreev(items);
         }
-        g_free(layout);
-        gtk_widget_set_hexpand(bw->toolbar, TRUE);
-        gtk_widget_set_valign(bw->toolbar, GTK_ALIGN_FILL);
-        gtk_header_bar_set_custom_title(GTK_HEADER_BAR(hb), bw->toolbar);
-        gtk_window_set_titlebar(GTK_WINDOW(bw->window), hb);
-        gtk_widget_show_all(hb);
-    } else {
-        gtk_box_pack_start(GTK_BOX(vbox), bw->toolbar, FALSE, FALSE, 0);
+        g_strfreev(sides);
+        gtk_header_bar_set_decoration_layout(GTK_HEADER_BAR(hb), o->str);
+        g_string_free(o, TRUE);
     }
+    g_free(layout);
+    gtk_widget_set_hexpand(bw->toolbar, TRUE);
+    gtk_widget_set_valign(bw->toolbar, GTK_ALIGN_FILL);
+    gtk_header_bar_set_custom_title(GTK_HEADER_BAR(hb), bw->toolbar);
+    gtk_window_set_titlebar(GTK_WINDOW(bw->window), hb);
+    gtk_widget_show_all(hb);
 
-    /* ---- main area: panel | page ---- */
-    bw->paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    gtk_widget_set_vexpand(bw->paned, TRUE);
-    bw->panels = panels_new(bw);   /* fills panel_box, panel_selector, panel_stack, panel_sep */
-    gtk_widget_set_no_show_all(bw->panel_box, TRUE);
-    gtk_paned_pack1(GTK_PANED(bw->paned), bw->panel_box, FALSE, FALSE);
-
+    /* ---- main area: the page ---- */
     bw->content_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     bw->content_stack = gtk_stack_new();
     gtk_widget_set_name(bw->content_stack, "content");
@@ -2702,9 +2530,8 @@ BrowserWindow *browser_window_new(GtkApplication *app)
     gtk_box_pack_end(GTK_BOX(bw->findbar), fc, FALSE, FALSE, 0);
     gtk_container_add(GTK_CONTAINER(bw->find_revealer), bw->findbar);
     gtk_box_pack_end(GTK_BOX(bw->content_box), bw->find_revealer, FALSE, FALSE, 0);
-    gtk_paned_pack2(GTK_PANED(bw->paned), bw->content_box, TRUE, FALSE);
-    g_signal_connect(bw->paned, "notify::position", G_CALLBACK(on_paned_position), bw);
-    gtk_box_pack_start(GTK_BOX(vbox), bw->paned, TRUE, TRUE, 0);
+    gtk_widget_set_vexpand(bw->content_box, TRUE);
+    gtk_box_pack_start(GTK_BOX(vbox), bw->content_box, TRUE, TRUE, 0);
 
 
     g_signal_connect(bw->window, "focus-in-event", G_CALLBACK(on_focus_in), bw);
@@ -2719,13 +2546,8 @@ BrowserWindow *browser_window_new(GtkApplication *app)
 
     windows = g_list_prepend(windows, bw);
     gtk_widget_show_all(vbox);
-    rebuild_bookmarks_menu(bw);
     rebuild_trash(bw);
     on_settings_changed(bw);
-    if (pref_get_bool("show_panel")) {
-        gtk_widget_show(bw->panel_box);
-        gtk_paned_set_position(GTK_PANED(bw->paned), pref_get_int("panel_width"));
-    }
     gtk_widget_show(GTK_WIDGET(bw->window));
     if (g_getenv("TUXBROWSER_SCREENSHOT") && !g_object_get_data(G_OBJECT(app), "screenshot")) {
         g_object_set_data(G_OBJECT(app), "screenshot", bw);

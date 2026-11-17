@@ -68,17 +68,11 @@ static const char *CSS =
 
 /* ---- bookmarks bar ---- */
 
-/* ---- panel ---- */
-"#panel-selector { background-image: linear-gradient(to right, #d9dfe5, #c8d0d8); border-right: 1px solid #a2adb8; padding: 4px 2px; }"
-"#panel-selector button { color: #2b3846; padding: 5px; border-radius: 3px; border: 1px solid transparent; background: none; box-shadow: none; }"
-"#panel-selector button:hover { border-color: #95a1ad; background-image: linear-gradient(#fbfcfd, #e3e8ed); }"
-"#panel-selector button.selected { border-color: #7f8b98; background-image: linear-gradient(#ffffff, #e9edf1); box-shadow: inset 0 1px #fff; }"
-"#panel-content { background-color: #eef1f4; }"
-"#panel-content label { color: #1d2733; }"
-"#panel-content label.dim-label { color: #5b6672; }"
-"#panel-content .panel-header { padding: 2px 0 4px 0; border-bottom: 1px solid #c3cbd3; }"
-"#panel-content .panel-header button { color: #2b3846; padding: 2px; }"
-"#panel separator { background-color: #a2adb8; min-width: 1px; }"
+/* ---- History and Downloads popups ---- */
+".tux-popup label { color: #1d2733; }"
+".tux-popup label.dim-label { color: #5b6672; }"
+".tux-popup .popup-header button { color: #2b3846; padding: 3px; }"
+".tux-popup .popup-title { font-weight: bold; }"
 
 /* ---- find bar & status bar ---- */
 "#findbar { background-image: linear-gradient(#e7ebef, #d4dae0); border-top: 1px solid #a2adb8; padding: 3px 6px; }"

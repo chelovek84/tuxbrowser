@@ -406,7 +406,6 @@ static gboolean on_context_menu(WebKitWebView *v, WebKitContextMenu *menu, GdkEv
             add_action_item(menu, -1, bw, "search-selection", l, NULL);
             g_free(l);
         }
-        add_action_item(menu, -1, bw, "note-selection", "Copy to _Note", NULL);
     }
     if (!(ctx & (WEBKIT_HIT_TEST_RESULT_CONTEXT_LINK | WEBKIT_HIT_TEST_RESULT_CONTEXT_IMAGE |
                  WEBKIT_HIT_TEST_RESULT_CONTEXT_MEDIA | WEBKIT_HIT_TEST_RESULT_CONTEXT_EDITABLE |

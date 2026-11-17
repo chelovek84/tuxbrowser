@@ -150,9 +150,13 @@ static void download_started(WebKitWebContext *ctx, WebKitDownload *d, gpointer 
     ensure_tick();
     profile_emit(EV_DOWNLOADS);
 
-    /* show the Transfers panel when a download starts */
+    /* say so without taking over the page; the Downloads tab lists it */
     BrowserWindow *bw = browser_window_get_active();
-    if (bw) browser_window_show_panel(bw, "transfers", FALSE);
+    if (bw) {
+        char *msg = g_strdup_printf("Downloading %s (Ctrl+J shows downloads)", t->name);
+        browser_window_flash_status(bw, msg);
+        g_free(msg);
+    }
 }
 
 static void transfer_free(Transfer *t)

@@ -14,10 +14,10 @@
 #define DEFAULT_USER_AGENT "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
 
 /* ------------------------------------------------------------------ */
-/* profile.c : settings, bookmarks, history, notes, session */
+/* profile.c : settings, bookmarks, history, session */
 
 typedef enum {
-    EV_SETTINGS, EV_BOOKMARKS, EV_HISTORY, EV_NOTES,
+    EV_SETTINGS, EV_BOOKMARKS, EV_HISTORY,
     EV_CLOSED_TABS, EV_DOWNLOADS,
     EV_LAST
 } ProfileEvent;
@@ -29,11 +29,6 @@ typedef struct {
     char *title;
     char *folder;      /* "" = top level */
 } Bookmark;
-
-typedef struct {
-    gint64 created;
-    char *text;
-} Note;
 
 typedef struct {
     char *url;
@@ -57,7 +52,6 @@ typedef struct {
     char *config_dir, *data_dir, *cache_dir;
     GKeyFile *settings;
     GPtrArray *bookmarks;    /* Bookmark* */
-    GPtrArray *notes;        /* Note* */
     GPtrArray *engines;      /* SearchEngine* */
     GPtrArray *closed_tabs;  /* Dial* (url,title), most recent first */
     void *db;                /* sqlite3* */
@@ -85,8 +79,6 @@ void      bookmark_remove(const char *url);
 void      bookmark_update(const char *old_url, const char *url, const char *title, const char *folder);
 void      bookmarks_save(void);
 
-void      notes_save(void);
-Note     *note_add(const char *text);
 
 
 void      history_add(const char *url, const char *title);
@@ -136,19 +128,16 @@ struct _BrowserWindow {
     GtkWidget *back_btn, *fwd_btn, *reload_btn, *zoom_btn, *zoom_btn_label;
     GtkWidget *address;
     GtkListStore *completion_store;
-    GtkWidget *paned, *panel_box, *panel_selector, *panel_stack;
     GtkWidget *content_stack;
     GtkWidget *findbar, *find_entry, *find_label, *find_case;
     GtkWidget *status_float, *status_label, *zoom_scale, *zoom_label;
-    GtkWidget *bookmarks_menu_btn;
-    GMenu *bookmarks_section, *trash_menu;
-    struct _Panels *panels;
+    GMenu *trash_menu;
     gboolean updating_zoom;
     gboolean setting_address;
     gboolean fullscreen;
-    guint panel_refresh_id, status_timeout_id, save_size_id;
+    guint tabs_refresh_id, status_timeout_id, save_size_id;
     char *temp_status;
-    GtkWidget *content_box, *find_revealer, *panel_sep;
+    GtkWidget *content_box, *find_revealer;
     GtkWidget *vtabs_revealer, *vtabs_list, *vtabs_button, *vtabs_title, *vtabs_scroll;
     GtkWidget *vstrip, *vstrip_scroll, *vstrip_box;   /* favicon strip shown while the tab bar is collapsed */
     GtkWidget *vstrip_current;    /* strip button of the current tab */
@@ -171,7 +160,6 @@ Tab   *browser_window_add_tab(BrowserWindow *bw, WebKitWebView *related, gboolea
 void   browser_window_close_tab(BrowserWindow *bw, Tab *tab);
 void   browser_window_update_chrome(BrowserWindow *bw);
 void   browser_window_set_status(BrowserWindow *bw, const char *text);
-void   browser_window_show_panel(BrowserWindow *bw, const char *name, gboolean toggle);
 GList *browser_window_tabs_in_order(BrowserWindow *bw);
 GList *browser_windows(void);
 void   browser_window_tab_changed(BrowserWindow *bw, Tab *tab);
@@ -225,14 +213,9 @@ void transfer_cancel(Transfer *t);
 void transfer_open(Transfer *t, gboolean folder);
 void transfers_clear_finished(void);
 
-/* panels.c */
-typedef struct _Panels Panels;
-Panels *panels_new(BrowserWindow *bw);
-void    panels_free(Panels *p);
-void    panels_refresh_tabs(Panels *p);
-void    panels_focus_search(Panels *p, const char *name);
-void    panels_note_selected(Panels *p, Note *n);
-GtkWidget *panels_selector_button(Panels *p, const char *name);
+/* popups.c : History and Downloads popovers */
+void history_popup_toggle(BrowserWindow *bw);
+void downloads_popup_toggle(BrowserWindow *bw);
 
 /* prefs.c */
 void prefs_dialog_show(GtkWindow *parent);

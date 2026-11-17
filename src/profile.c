@@ -1,4 +1,4 @@
-/* Profile: settings, bookmarks, notes (text files), history (sqlite). */
+/* Profile: settings, bookmarks (text files), history (sqlite). */
 #include "tuxbrowser.h"
 #include <errno.h>
 #include <sqlite3.h>
@@ -28,18 +28,14 @@ static const struct { const char *key; gboolean val; } default_bools[] = {
     { "mouse_gestures",      TRUE },
     { "load_images",         TRUE },
     { "enable_javascript",   TRUE },
-    { "show_panel",          FALSE },
     { "smooth_scrolling",    TRUE },
     { "ask_download_dir",    FALSE },
     { "new_tab_next",        TRUE },
     { "window_maximized",    FALSE },
     { "close_last_tab_closes_window", FALSE },
-    { "tabs_in_titlebar",    TRUE },
-    { "show_tab_strip",      TRUE },
 };
 static const struct { const char *key; int val; } default_ints[] = {
     { "default_zoom",       100 },
-    { "panel_width",        250 },
     { "window_width",       1200 },
     { "window_height",      800 },
 };
@@ -367,50 +363,6 @@ void bookmark_update(const char *old_url, const char *url, const char *title, co
 }
 
 /* ---------------------------------------------------------------- */
-/* notes                                                             */
-
-static void note_free(Note *n) { g_free(n->text); g_free(n); }
-
-static void load_notes(void)
-{
-    profile->notes = g_ptr_array_new_with_free_func((GDestroyNotify)note_free);
-    GPtrArray *rows = tsv_read("notes.tsv");
-    for (guint i = 0; i < rows->len; i++) {
-        char **f = rows->pdata[i];
-        if (!f[0] || !f[1]) continue;
-        Note *n = g_new0(Note, 1);
-        n->created = g_ascii_strtoll(f[0], NULL, 10);
-        n->text = g_strdup(f[1]);
-        g_ptr_array_add(profile->notes, n);
-    }
-    g_ptr_array_unref(rows);
-}
-
-void notes_save(void)
-{
-    GString *o = g_string_new("# created\ttext\n");
-    for (guint i = 0; i < profile->notes->len; i++) {
-        Note *n = profile->notes->pdata[i];
-        g_string_append_printf(o, "%" G_GINT64_FORMAT "\t", n->created);
-        tsv_field(o, n->text, TRUE);
-    }
-    tsv_write("notes.tsv", o);
-    g_string_free(o, TRUE);
-    profile_emit(EV_NOTES);
-}
-
-Note *note_add(const char *text)
-{
-    Note *n = g_new0(Note, 1);
-    n->created = g_get_real_time() / G_USEC_PER_SEC;
-    n->text = g_strdup(text ? text : "");
-    g_ptr_array_add(profile->notes, n);
-    notes_save();
-    return n;
-}
-
-
-/* ---------------------------------------------------------------- */
 /* closed tabs (trash can)                                           */
 
 static void dial_free(Dial *d) { g_free(d->url); g_free(d->title); g_free(d); }
@@ -576,7 +528,6 @@ void profile_init(void)
 
     load_settings();
     load_bookmarks();
-    load_notes();
     profile->closed_tabs = g_ptr_array_new_with_free_func((GDestroyNotify)dial_free);
     history_open();
 }

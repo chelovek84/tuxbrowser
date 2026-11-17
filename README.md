@@ -15,10 +15,13 @@ A fast, lightweight web browser written in C on WebKitGTK.
 - The address bar sits in the window title bar, sharing a row with the window buttons:
   the tab bar toggle in the top-left corner (full height, so it can be hit without looking), the ☰ menu,
   back/forward/reload, the zoom button, the address/search box, the ★ bookmarks bar toggle, then the window controls.
-  The window icon and window menu are left out of the title bar so nothing sits left of the toggle. You can turn this off in Preferences → Advanced; the change applies to new
-  windows.
-- **☰ menu** button (Tabs and Windows, Page, Bookmarks, Downloads, History, Notes,
-  Settings, Help, Exit). It is the only menu; there is no menu bar.
+  The window icon and window menu are left out of the title bar so nothing sits left of the toggle. This layout is
+  fixed; there is no separate toolbar row.
+- **☰ menu** button: one short flat list with only what has no button of its own — New Window;
+  History, Downloads; Find, Print, Save Page As, Open File, Full Screen, Developer Tools;
+  Preferences, Delete Private Data; Keyboard Shortcuts, About. Ctrl+Q quits (closes all windows). Tabs are managed in the tab
+  bar and its right-click menu, bookmarks in the bookmarks bar, zoom with the zoom button, and
+  images, JavaScript and mouse gestures in Preferences. There is no menu bar.
 - **Vertical tab bar** on the left, toggled with the title bar button or **F9**. It slides
   in over the page without resizing it. Its header holds the tab controls: new tab (+) and
   closed tabs (trash). Click a tab to switch, middle-click to close, right-click for more,
@@ -28,9 +31,10 @@ A fast, lightweight web browser written in C on WebKitGTK.
   current tab is marked with a blue edge. Click to switch, middle-click to close, right-click for
   more, hover for the title and address; the + at the top opens a new tab. Empty (start page) tabs show a
   blank-page icon. The strip sits next to
-  the page instead of covering it, and the opened tab bar slides over it. It can be turned off in
-  Preferences → Advanced.
-- **Vertical bookmarks bar** on the right, toggled with the ★ title bar button or **F7**. It also
+  the page instead of covering it, and the opened tab bar slides over it. The tab bar and the strip
+  are the only things on the left side; neither has settings.
+- **Vertical bookmarks bar** on the right, toggled with the ★ title bar button, **F7** or **Ctrl+Shift+B**. It is the
+  only bookmark manager. It also
   slides in over the page. Its header holds bookmark management: bookmark this page (+),
   properties, and delete. Below that are a quick-find field and the bookmarks with
   folders. Click to open, middle-click for a background tab, right-click for more (open in new
@@ -47,8 +51,11 @@ A fast, lightweight web browser written in C on WebKitGTK.
 - No status bar. A link's address shows in a small label over the bottom-left corner of the page
   while the mouse is on the link, as do short messages ("Bookmark added"). Loading progress is shown
   in the address bar.
-- **Panels** (F4): Bookmarks with folders, Notes, Transfers, History grouped by day, and
-  Windows.
+- **History** (☰ → History, **Ctrl+H**) and **Downloads** (☰ → Downloads, **Ctrl+J**) drop down as
+  popups under the ☰ button (from the top of the page in full screen). History is grouped by day and
+  has a search field; Del deletes the selected entry. Double-click an entry to open it in the current
+  tab (the popup closes), middle-click for a background tab. Press the shortcut again or Esc to close.
+  Starting a download shows a short message; the Downloads popup lists it.
 - Address bar: shows load progress inside the field, a padlock and site info, a bookmark
   star, and completion from bookmarks and history. **Shift+Enter** opens the address in a
   new tab.
@@ -67,7 +74,9 @@ A fast, lightweight web browser written in C on WebKitGTK.
   different one can be picked in Preferences → Web Pages: Chrome/Edge on Windows, Firefox on
   Linux, Safari on macOS, Chrome on Android (mobile sites), WebKitGTK's own, or a custom string.
 - Asks sites for **your system languages** (from `LANGUAGE`/`LANG`, e.g. `en-US, en`). A different
-  list can be set in Preferences → Web Pages → Languages; leave it empty to follow the system.
+  language can be picked in Preferences → Web Pages → Languages, like the user agent: System default,
+  a list of common languages (each with English as a fallback, e.g. `de-DE, de, en`), or Custom...,
+  which lets you type your own list. The field under the list shows exactly what is sent.
 - **Mouse gestures** (hold the right button):
 
   | Gesture | Action |
@@ -82,7 +91,6 @@ A fast, lightweight web browser written in C on WebKitGTK.
 
   Holding the right button and turning the wheel cycles tabs. Holding the right button
   and clicking left goes back.
-- Notes: right-click selected text and choose "Copy to Note".
 - **Graphics memory use** (Preferences → Advanced → Performance, applies after a restart). In *Low*
   mode pages are painted by the CPU and video frames don't go through OpenGL, which keeps video memory
   free for the desktop and other programs. *Automatic* picks Low for cards on the old `radeon` driver and
@@ -101,7 +109,7 @@ A fast, lightweight web browser written in C on WebKitGTK.
 - Delete Private Data (Ctrl+Shift+Del), Preferences (Ctrl+F12 or Alt+P).
 - The session is restored on startup.
 
-The full shortcut list is under ☰ → Help → Keyboard Shortcuts.
+The full shortcut list is under ☰ → Keyboard Shortcuts.
 
 ## Command line
 
@@ -122,9 +130,9 @@ stderr, including the decoder each format will use. They take effect when Tux Br
   start page.
 - Settings: `~/.config/tuxbrowser/settings.ini`
 - Optional CSS overrides for the chrome: `~/.config/tuxbrowser/user.css`
-- Data: `~/.local/share/tuxbrowser/` (`bookmarks.tsv`, `notes.tsv`, `history.sqlite`,
-  `session.ini`, cookies). Files from older versions (`speeddial.tsv`, `thumbnails/`) are no longer
-  used and can be deleted.
+- Data: `~/.local/share/tuxbrowser/` (`bookmarks.tsv`, `history.sqlite`,
+  `session.ini`, cookies). Files from older versions (`notes.tsv`, `speeddial.tsv`, `thumbnails/`) are
+  no longer used and can be deleted.
 - Set `TUXBROWSER_PROFILE=/some/dir` to use a separate profile. It runs as its own instance, next to a
   normal Tux Browser window.
 

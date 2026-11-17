@@ -182,6 +182,62 @@ static void ua_combo_changed(GtkComboBox *combo, GtkEntry *entry)
     gtk_editable_set_editable(GTK_EDITABLE(entry), FALSE);   /* shown for reference only */
 }
 
+/* ---------------------------------------------------------------- */
+/* language presets: same pattern as the user agent (a list, the string shown below it,
+ * editable only for Custom); "System default" is stored as "" */
+
+#define LANG_CUSTOM "custom"
+#define LANG_SYSTEM "system"
+
+static const struct { const char *id, *label, *langs; } lang_presets[] = {
+    { LANG_SYSTEM, NULL, NULL },   /* label and value come from the system at runtime */
+    { "en-us", "English (US)",            "en-US, en" },
+    { "en-gb", "English (UK)",            "en-GB, en" },
+    { "hy",    "Armenian",                "hy-AM, hy, en" },
+    { "zh-cn", "Chinese (Simplified)",    "zh-CN, zh, en" },
+    { "zh-tw", "Chinese (Traditional)",   "zh-TW, zh, en" },
+    { "nl",    "Dutch",                   "nl-NL, nl, en" },
+    { "fr",    "French",                  "fr-FR, fr, en" },
+    { "de",    "German",                  "de-DE, de, en" },
+    { "it",    "Italian",                 "it-IT, it, en" },
+    { "ja",    "Japanese",                "ja-JP, ja, en" },
+    { "ko",    "Korean",                  "ko-KR, ko, en" },
+    { "pl",    "Polish",                  "pl-PL, pl, en" },
+    { "pt-br", "Portuguese (Brazil)",     "pt-BR, pt, en" },
+    { "ru",    "Russian",                 "ru-RU, ru, en" },
+    { "es",    "Spanish",                 "es-ES, es, en" },
+    { "tr",    "Turkish",                 "tr-TR, tr, en" },
+    { "uk",    "Ukrainian",               "uk-UA, uk, en" },
+};
+
+static char *system_langs_string(void)
+{
+    char **sys = web_system_languages();
+    char *s = g_strjoinv(", ", sys);
+    g_strfreev(sys);
+    return s;
+}
+
+static void lang_combo_changed(GtkComboBox *combo, GtkEntry *entry)
+{
+    const char *id = gtk_combo_box_get_active_id(combo);
+    if (!id) return;
+    if (g_str_equal(id, LANG_CUSTOM)) {
+        gtk_editable_set_editable(GTK_EDITABLE(entry), TRUE);
+        gtk_widget_grab_focus(GTK_WIDGET(entry));
+        return;
+    }
+    if (g_str_equal(id, LANG_SYSTEM)) {
+        char *sys = system_langs_string();
+        gtk_entry_set_text(entry, sys);
+        g_free(sys);
+    } else {
+        for (guint i = 1; i < G_N_ELEMENTS(lang_presets); i++)
+            if (g_str_equal(id, lang_presets[i].id)) gtk_entry_set_text(entry, lang_presets[i].langs);
+    }
+    gtk_editable_set_editable(GTK_EDITABLE(entry), FALSE);   /* shown for reference only */
+}
+
 void prefs_dialog_show(GtkWindow *parent)
 {
     GtkWidget *d = gtk_dialog_new_with_buttons("Preferences", parent, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
@@ -298,19 +354,36 @@ void prefs_dialog_show(GtkWindow *parent)
     g_free(s);
 
     gtk_grid_attach(GTK_GRID(g), row_label("_Languages:"), 0, r, 1, 1);
+    GtkWidget *lang_combo = gtk_combo_box_text_new();
+    char *sys_str = system_langs_string();
+    char *sys_label = g_strdup_printf("System default (%s)", sys_str);
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(lang_combo), LANG_SYSTEM, sys_label);
+    g_free(sys_label);
+    for (guint i = 1; i < G_N_ELEMENTS(lang_presets); i++)
+        gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(lang_combo), lang_presets[i].id, lang_presets[i].label);
+    gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(lang_combo), LANG_CUSTOM, "Custom...");
+    gtk_grid_attach(GTK_GRID(g), lang_combo, 1, r++, 2, 1);
     GtkWidget *langs_entry = gtk_entry_new();
-    s = pref_get_string("accept_languages");
-    gtk_entry_set_text(GTK_ENTRY(langs_entry), s);
-    g_free(s);
-    char **sys = web_system_languages();
-    char *sys_str = g_strjoinv(", ", sys);
-    char *ph = g_strdup_printf("System default: %s", sys_str);
-    gtk_entry_set_placeholder_text(GTK_ENTRY(langs_entry), ph);
+    gtk_entry_set_placeholder_text(GTK_ENTRY(langs_entry), "Languages, most preferred first, e.g. de-DE, en");
     gtk_widget_set_tooltip_text(langs_entry, "Languages web pages should use, most preferred first, "
-                                "e.g. \"de-DE, en\". Leave empty to follow the system language.");
-    g_free(ph); g_free(sys_str); g_strfreev(sys);
+                                "separated by commas, e.g. \"de-DE, de, en\".");
     gtk_widget_set_hexpand(langs_entry, TRUE);
     gtk_grid_attach(GTK_GRID(g), langs_entry, 1, r++, 2, 1);
+    /* select the preset that matches the saved string ("" = system default), else Custom */
+    s = g_strstrip(pref_get_string("accept_languages"));
+    sel = LANG_CUSTOM;
+    if (!*s) {
+        sel = LANG_SYSTEM;
+    } else {
+        for (guint i = 1; i < G_N_ELEMENTS(lang_presets); i++)
+            if (g_str_equal(s, lang_presets[i].langs)) sel = lang_presets[i].id;
+    }
+    gtk_entry_set_text(GTK_ENTRY(langs_entry), *s ? s : sys_str);
+    gtk_combo_box_set_active_id(GTK_COMBO_BOX(lang_combo), sel);
+    gtk_editable_set_editable(GTK_EDITABLE(langs_entry), g_str_equal(sel, LANG_CUSTOM));
+    g_signal_connect(lang_combo, "changed", G_CALLBACK(lang_combo_changed), langs_entry);
+    g_free(sys_str);
+    g_free(s);
     gtk_notebook_append_page(GTK_NOTEBOOK(nb), g, gtk_label_new("Web Pages"));
 
     /* Advanced */
@@ -318,9 +391,6 @@ void prefs_dialog_show(GtkWindow *parent)
     r = 0;
     section(g, r++, "Browsing");
     checks = g_list_append(checks, check(g, r++, "Enable _mouse gestures", "mouse_gestures"));
-    section(g, r++, "Interface");
-    checks = g_list_append(checks, check(g, r++, "Put the _address bar in the window title bar (new windows)", "tabs_in_titlebar"));
-    checks = g_list_append(checks, check(g, r++, "Show tab _favicons while the vertical tab bar is closed", "show_tab_strip"));
     section(g, r++, "Performance");
     gtk_grid_attach(GTK_GRID(g), row_label("_Hardware acceleration:"), 0, r, 1, 1);
     GtkWidget *hw = gtk_combo_box_text_new();
@@ -392,9 +462,10 @@ void prefs_dialog_show(GtkWindow *parent)
             else pref_set_string("user_agent", val);
             g_free(val);
         }
-        {
+        {   /* system default is stored as "" so it keeps following the system */
+            const char *id = gtk_combo_box_get_active_id(GTK_COMBO_BOX(lang_combo));
             char *l = g_strstrip(g_strdup(gtk_entry_get_text(GTK_ENTRY(langs_entry))));
-            pref_set_string("accept_languages", l);
+            pref_set_string("accept_languages", !id || g_str_equal(id, LANG_SYSTEM) ? "" : l);
             g_free(l);
             web_apply_languages();
         }
