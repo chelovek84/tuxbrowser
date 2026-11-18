@@ -1,4 +1,4 @@
-/* History and Downloads popups: popovers that drop down from the title bar. */
+/* History, Downloads and Notifications popups: popovers that drop down from the title bar. */
 #include "tuxbrowser.h"
 #include <string.h>
 
@@ -13,7 +13,12 @@ typedef struct {
     guint hi_timer;
     /* downloads */
     GtkWidget *tr_list;
+    /* notifications */
+    GtkWidget *nt_list;
+    guint nt_timer;
 } Popup;
+
+typedef enum { POP_HISTORY, POP_DOWNLOADS, POP_NOTIFICATIONS } PopupKind;
 
 enum { COL_ICON, COL_TITLE, COL_URL, COL_TIP, COL_PTR, COL_WHEN, N_COLS };
 #define STORE_TYPES G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_POINTER, G_TYPE_STRING
@@ -422,32 +427,161 @@ static GtkWidget *build_downloads(Popup *p)
 }
 
 /* ---------------------------------------------------------------- */
+/* notifications                                                     */
+
+static char *ago(gint64 when)
+{
+    gint64 s = (g_get_real_time() - when) / G_USEC_PER_SEC;
+    if (s < 60) return g_strdup("just now");
+    if (s < 3600) return g_strdup_printf("%d min ago", (int)(s / 60));
+    GDateTime *dt = g_date_time_new_from_unix_local(when / G_USEC_PER_SEC);
+    char *r = g_date_time_format(dt, s < 20 * 3600 ? "%H:%M" : "%Y-%m-%d %H:%M");
+    g_date_time_unref(dt);
+    return r;
+}
+
+static void nt_dismiss(GtkButton *b, gpointer data)
+{
+    notice_dismiss(g_object_get_data(G_OBJECT(b), "notice"));
+}
+
+static GtkWidget *nt_row_new(Notice *x)
+{
+    GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    g_object_set(row, "margin", 4, NULL);
+    GtkWidget *icon = x->icon ? gtk_image_new_from_pixbuf(x->icon)
+                              : gtk_image_new_from_icon_name("text-html-symbolic", GTK_ICON_SIZE_MENU);
+    gtk_widget_set_valign(icon, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(icon, 2);
+    gtk_box_pack_start(GTK_BOX(row), icon, FALSE, FALSE, 0);
+
+    GtkWidget *col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    GtkWidget *title = gtk_label_new(NULL);
+    char *m = g_markup_printf_escaped(x->unread ? "<b>%s</b>" : "%s", x->title && *x->title ? x->title : x->host);
+    gtk_label_set_markup(GTK_LABEL(title), m);
+    g_free(m);
+    gtk_label_set_xalign(GTK_LABEL(title), 0);
+    gtk_label_set_ellipsize(GTK_LABEL(title), PANGO_ELLIPSIZE_END);
+    gtk_box_pack_start(GTK_BOX(col), title, FALSE, FALSE, 0);
+    if (x->body && *x->body) {
+        GtkWidget *body = gtk_label_new(x->body);
+        gtk_label_set_xalign(GTK_LABEL(body), 0);
+        gtk_label_set_line_wrap(GTK_LABEL(body), TRUE);
+        gtk_label_set_line_wrap_mode(GTK_LABEL(body), PANGO_WRAP_WORD_CHAR);
+        gtk_label_set_lines(GTK_LABEL(body), 3);
+        gtk_label_set_ellipsize(GTK_LABEL(body), PANGO_ELLIPSIZE_END);
+        gtk_label_set_max_width_chars(GTK_LABEL(body), 60);
+        gtk_box_pack_start(GTK_BOX(col), body, FALSE, FALSE, 0);
+    }
+    char *when = ago(x->when);
+    char *info = g_strdup_printf("%s · %s%s", x->host, when, x->view ? "" : " · tab closed");
+    GtkWidget *il = gtk_label_new(info);
+    g_free(info);
+    g_free(when);
+    gtk_label_set_xalign(GTK_LABEL(il), 0);
+    gtk_label_set_ellipsize(GTK_LABEL(il), PANGO_ELLIPSIZE_END);
+    gtk_style_context_add_class(gtk_widget_get_style_context(il), "dim-label");
+    gtk_box_pack_start(GTK_BOX(col), il, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), col, TRUE, TRUE, 0);
+
+    GtkWidget *close = small_button("window-close-symbolic", "Dismiss");
+    gtk_widget_set_valign(close, GTK_ALIGN_START);
+    g_object_set_data(G_OBJECT(close), "notice", x);
+    g_signal_connect(close, "clicked", G_CALLBACK(nt_dismiss), NULL);
+    gtk_box_pack_end(GTK_BOX(row), close, FALSE, FALSE, 0);
+    gtk_widget_set_tooltip_text(row, x->view ? "Show the page" : "Open the page again");
+    g_object_set_data(G_OBJECT(row), "notice", x);
+    gtk_widget_show_all(row);
+    return row;
+}
+
+static void nt_rebuild(Popup *p)
+{
+    GList *rows = gtk_container_get_children(GTK_CONTAINER(p->nt_list));
+    for (GList *l = rows; l; l = l->next) gtk_widget_destroy(l->data);
+    g_list_free(rows);
+    for (guint i = 0; i < notices->len; i++)
+        gtk_list_box_insert(GTK_LIST_BOX(p->nt_list), nt_row_new(notices->pdata[i]), -1);
+}
+
+static void nt_changed(gpointer data)
+{
+    Popup *p = data;
+    if (gtk_widget_get_visible(p->popover)) nt_rebuild(p);
+}
+
+/* keeps "3 min ago" current while the popup is open */
+static gboolean nt_tick(gpointer data)
+{
+    nt_rebuild(data);
+    return G_SOURCE_CONTINUE;
+}
+
+static void nt_row_activated(GtkListBox *lb, GtkListBoxRow *row, Popup *p)
+{
+    Notice *x = g_object_get_data(G_OBJECT(gtk_bin_get_child(GTK_BIN(row))), "notice");
+    gtk_popover_popdown(GTK_POPOVER(p->popover));
+    notice_activate(x, p->bw);
+}
+
+static void nt_clear(GtkButton *b, Popup *p) { notices_clear(); }
+
+static GtkWidget *build_notifications(Popup *p)
+{
+    GtkWidget *box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    GtkWidget *hdr;
+    gtk_box_pack_start(GTK_BOX(box), popup_header("Notifications", &hdr), FALSE, FALSE, 0);
+    GtkWidget *clr = small_button("edit-clear-all-symbolic", "Dismiss all");
+    g_signal_connect(clr, "clicked", G_CALLBACK(nt_clear), p);
+    gtk_box_pack_end(GTK_BOX(hdr), clr, FALSE, FALSE, 0);
+    p->nt_list = gtk_list_box_new();
+    gtk_list_box_set_selection_mode(GTK_LIST_BOX(p->nt_list), GTK_SELECTION_NONE);
+    gtk_list_box_set_activate_on_single_click(GTK_LIST_BOX(p->nt_list), TRUE);
+    GtkWidget *ph = gtk_label_new("No notifications");
+    gtk_style_context_add_class(gtk_widget_get_style_context(ph), "dim-label");
+    gtk_widget_show(ph);
+    gtk_list_box_set_placeholder(GTK_LIST_BOX(p->nt_list), ph);
+    g_signal_connect(p->nt_list, "row-activated", G_CALLBACK(nt_row_activated), p);
+    gtk_box_pack_start(GTK_BOX(box), scrolled(p->nt_list), TRUE, TRUE, 0);
+    profile_connect(EV_NOTIFICATIONS, nt_changed, p);
+    return box;
+}
+
+/* ---------------------------------------------------------------- */
 
 static void popup_destroyed(GtkWidget *w, Popup *p)
 {
     profile_disconnect_data(p);
     if (p->hi_timer) g_source_remove(p->hi_timer);
+    if (p->nt_timer) g_source_remove(p->nt_timer);
     if (p->hi_store) g_object_unref(p->hi_store);
     g_free(p);
 }
 
 static void popup_closed(GtkPopover *pop, Popup *p)
 {
+    if (p->nt_timer) {
+        g_source_remove(p->nt_timer);
+        p->nt_timer = 0;
+    }
+    if (p->nt_list) notices_mark_read();   /* ones that arrived while it was open */
     /* hand the keyboard back to the page */
     Tab *t = browser_window_current_tab(p->bw);
     if (t) gtk_widget_grab_focus(GTK_WIDGET(t->view));
 }
 
-static Popup *popup_new(BrowserWindow *bw, gboolean history)
+static Popup *popup_new(BrowserWindow *bw, PopupKind kind)
 {
+    static const char *names[] = { "history-popup", "downloads-popup", "notifications-popup" };
     Popup *p = g_new0(Popup, 1);
     p->bw = bw;
     p->popover = gtk_popover_new(bw->menu_button);
-    gtk_widget_set_name(p->popover, history ? "history-popup" : "downloads-popup");
+    gtk_widget_set_name(p->popover, names[kind]);
     gtk_style_context_add_class(gtk_widget_get_style_context(p->popover), "tux-popup");
-    GtkWidget *content = history ? build_history(p) : build_downloads(p);
+    GtkWidget *content = kind == POP_HISTORY ? build_history(p)
+                       : kind == POP_DOWNLOADS ? build_downloads(p) : build_notifications(p);
     g_object_set(content, "margin", 8, NULL);
-    gtk_widget_set_size_request(content, 560, history ? 520 : 360);
+    gtk_widget_set_size_request(content, kind == POP_NOTIFICATIONS ? 460 : 560, kind == POP_HISTORY ? 520 : 360);
     gtk_container_add(GTK_CONTAINER(p->popover), content);
     gtk_widget_show_all(content);
     g_signal_connect(p->popover, "destroy", G_CALLBACK(popup_destroyed), p);
@@ -456,21 +590,22 @@ static Popup *popup_new(BrowserWindow *bw, gboolean history)
 }
 
 /* Shows (or hides, if it is already up) one of the window's popups. History drops down
- * from the menu button, Downloads from its own button; in full screen, where the title bar
- * is hidden, both drop from the top of the page. */
-static void popup_toggle(BrowserWindow *bw, gboolean history)
+ * from the menu button, Downloads and Notifications from their own buttons; in full screen,
+ * or while the bell is hidden, they drop from the top of the page. */
+static void popup_toggle(BrowserWindow *bw, PopupKind kind, gboolean toggle)
 {
-    const char *key = history ? "history-popup" : "downloads-popup";
-    Popup *p = g_object_get_data(G_OBJECT(bw->window), key);
+    static const char *keys[] = { "history-popup", "downloads-popup", "notifications-popup" };
+    Popup *p = g_object_get_data(G_OBJECT(bw->window), keys[kind]);
     if (!p) {
-        p = popup_new(bw, history);
-        g_object_set_data(G_OBJECT(bw->window), key, p);
+        p = popup_new(bw, kind);
+        g_object_set_data(G_OBJECT(bw->window), keys[kind], p);
     }
     if (gtk_widget_get_visible(p->popover)) {
-        gtk_popover_popdown(GTK_POPOVER(p->popover));
+        if (toggle) gtk_popover_popdown(GTK_POPOVER(p->popover));
         return;
     }
-    GtkWidget *anchor = history ? bw->menu_button : bw->downloads_btn;
+    GtkWidget *anchor = kind == POP_HISTORY ? bw->menu_button
+                      : kind == POP_DOWNLOADS ? bw->downloads_btn : bw->notify_btn;
     if (gtk_widget_is_drawable(anchor)) {
         GdkRectangle r = { 0, 0, gtk_widget_get_allocated_width(anchor), gtk_widget_get_allocated_height(anchor) };
         gtk_popover_set_relative_to(GTK_POPOVER(p->popover), anchor);
@@ -481,10 +616,17 @@ static void popup_toggle(BrowserWindow *bw, gboolean history)
         gtk_popover_set_pointing_to(GTK_POPOVER(p->popover), &r);
     }
     gtk_popover_set_position(GTK_POPOVER(p->popover), GTK_POS_BOTTOM);
+    if (kind == POP_NOTIFICATIONS) {
+        nt_rebuild(p);          /* unread ones in bold; they count as read once it closes */
+        if (!p->nt_timer) p->nt_timer = g_timeout_add_seconds(30, nt_tick, p);
+    }
     gtk_popover_popup(GTK_POPOVER(p->popover));
-    if (history) gtk_widget_grab_focus(p->hi_search);
-    else gtk_widget_grab_focus(p->tr_list);
+    if (kind == POP_HISTORY) gtk_widget_grab_focus(p->hi_search);
+    else if (kind == POP_DOWNLOADS) gtk_widget_grab_focus(p->tr_list);
+    else gtk_widget_grab_focus(p->nt_list);
 }
 
-void history_popup_toggle(BrowserWindow *bw)   { popup_toggle(bw, TRUE); }
-void downloads_popup_toggle(BrowserWindow *bw) { popup_toggle(bw, FALSE); }
+void history_popup_toggle(BrowserWindow *bw)       { popup_toggle(bw, POP_HISTORY, TRUE); }
+void downloads_popup_toggle(BrowserWindow *bw)     { popup_toggle(bw, POP_DOWNLOADS, TRUE); }
+void notifications_popup_toggle(BrowserWindow *bw) { popup_toggle(bw, POP_NOTIFICATIONS, TRUE); }
+void notifications_popup_show(BrowserWindow *bw)   { popup_toggle(bw, POP_NOTIFICATIONS, FALSE); }

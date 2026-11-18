@@ -41,6 +41,7 @@ static void set_accels(GtkApplication *app)
         { "win.toggle-vbookmarks", { "F7", "<Control><Shift>b", NULL } },
         { "win.show-history",     { "<Control><Shift>h", "<Control>h", NULL } },
         { "win.show-downloads",   { "<Control>j", "<Control><Alt>t", NULL } },
+        { "win.show-notifications", { "<Control><Shift>m", NULL } },
         { "win.find",             { "<Control>f", NULL } },
         { "win.find-next",        { "F3", "<Control>g", NULL } },
         { "win.find-prev",        { "<Shift>F3", "<Control><Shift>g", NULL } },
@@ -84,6 +85,7 @@ static void on_startup(GApplication *app, gpointer data)
     web_init();
     adblock_init();
     theme_load();
+    tray_update();
     static const GActionEntry app_actions[] = {
         { "quit", quit_activated },
         { "theme", NULL, "s", "'light'", theme_changed },
@@ -120,6 +122,14 @@ static void on_activate(GApplication *app, gpointer data)
 {
     if (!browser_windows()) {
         open_startup(GTK_APPLICATION(app));
+        return;
+    }
+    /* launched again while hidden in the tray: bring the windows back */
+    gboolean shown = FALSE;
+    for (GList *l = browser_windows(); l; l = l->next)
+        if (gtk_widget_get_visible(GTK_WIDGET(((BrowserWindow *)l->data)->window))) shown = TRUE;
+    if (!shown) {
+        tray_show_browser();
         return;
     }
     /* launched again while running: new window with the start page */

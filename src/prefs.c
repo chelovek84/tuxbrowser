@@ -457,6 +457,33 @@ void prefs_dialog_show(GtkWindow *parent)
     g_free(s);
     gtk_notebook_append_page(GTK_NOTEBOOK(nb), g, gtk_label_new("Web Pages"));
 
+    /* Notifications */
+    g = page_grid();
+    r = 0;
+    gtk_grid_attach(GTK_GRID(g), hint_label("Notifications from web pages are collected under the bell next to the "
+                                      "address bar. They only arrive while the page is open in a tab."), 0, r++, 3, 1);
+    checks = g_list_append(checks, check(g, r++, "Also show them as _desktop notifications", "notify_desktop"));
+    section(g, r++, "Sites allowed to show notifications");
+    gtk_grid_attach(GTK_GRID(g), hint_label("One site per line, e.g. https://mail.example.com. A site that asks is "
+                                      "added here or below by your answer; delete its line to be asked again."), 0, r++, 3, 1);
+    s = pref_get_string("notify_allowed");
+    GtkWidget *nt_allow = text_area(s, TRUE, 70);
+    g_free(s);
+    gtk_grid_attach(GTK_GRID(g), nt_allow, 0, r++, 3, 1);
+    section(g, r++, "Sites not allowed");
+    s = pref_get_string("notify_denied");
+    GtkWidget *nt_deny = text_area(s, TRUE, 70);
+    g_free(s);
+    gtk_grid_attach(GTK_GRID(g), nt_deny, 0, r++, 3, 1);
+    section(g, r++, "Tray icon");
+    checks = g_list_append(checks, check(g, r++, "Show an icon in the system _tray", "tray_icon"));
+    checks = g_list_append(checks, check(g, r++, "_Blink it while there are new notifications", "tray_blink"));
+    checks = g_list_append(checks, check(g, r++, "_Keep running in the tray when the last window is closed",
+                                         "close_to_tray"));
+    gtk_grid_attach(GTK_GRID(g), hint_label("Pages stay open in the background, so they can still send notifications. "
+                                      "Quit with Ctrl+Q or from the tray icon's menu."), 0, r++, 3, 1);
+    gtk_notebook_append_page(GTK_NOTEBOOK(nb), g, gtk_label_new("Notifications"));
+
     /* Advanced */
     g = page_grid();
     r = 0;
@@ -563,6 +590,11 @@ void prefs_dialog_show(GtkWindow *parent)
     /* quitting while the dialog is open destroys it with its window: notice that */
     g_object_add_weak_pointer(G_OBJECT(d), (gpointer *)&d);
     if (gtk_dialog_run(GTK_DIALOG(d)) == GTK_RESPONSE_OK && d) {
+        {   /* notification sites */
+            char *a = text_area_get(nt_allow), *dn = text_area_get(nt_deny);
+            notifications_set_sites(a, dn);
+            g_free(a); g_free(dn);
+        }
         {   /* ad blocking */
             char *t = text_area_get(ab_allow), *c = clean_lines(t);
             adblock_set_allowed_sites(c);
@@ -613,6 +645,7 @@ void prefs_dialog_show(GtkWindow *parent)
         g_free(defname);
         web_apply_settings();
         prefs_save();
+        tray_update();
     }
     g_list_free(checks);
     g_object_unref(se_store);

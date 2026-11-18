@@ -69,7 +69,7 @@ static const char *CSS =
 /* ---- bookmarks bar ---- */
 
 /* ---- downloads button: a nav button whose icon gets a progress ring while downloading ---- */
-"#downloads-button image { color: #2b3846; }"
+"#downloads-button image, #notify-button image { color: #2b3846; }"
 "#downloads-button.active image, #downloads-button .downloads-ring { color: #2f6fd0; }"
 /* ---- History and Downloads popups ---- */
 ".tux-popup label { color: #1d2733; }"
@@ -161,7 +161,7 @@ static const char *CSS =
  * which WebKit also reports to pages as prefers-color-scheme: dark. */
 static const char *DARK_CSS =
 "#main-menu > image, #addressbar button.nav-button > image, #vtabs-button > image, #vbm-button > image,"
-"  #downloads-button image, #newtab-button > image, #trash-button > image { color: #d5dbe1; }"
+"  #downloads-button image, #notify-button image, #newtab-button > image, #trash-button > image { color: #d5dbe1; }"
 "#downloads-button.active image, #downloads-button .downloads-ring { color: #6ea0e8; }"
 "#main-menu:hover, #addressbar button.nav-button:hover, #tabtitlebar button.titlebutton:hover,"
 "  #toolrow #vtabs-button:hover {"

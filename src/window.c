@@ -6,6 +6,7 @@ static GList *windows;          /* BrowserWindow*, most recently focused first *
 static gboolean quitting;
 static gboolean restoring;   /* append tabs in order while restoring a session */
 static GtkWidget *build_downloads_button(BrowserWindow *bw);
+static GtkWidget *build_notify_button(BrowserWindow *bw);
 
 GList *browser_windows(void) { return windows; }
 
@@ -1082,6 +1083,7 @@ static void on_switch_page(GtkNotebook *nb, GtkWidget *child, guint n, BrowserWi
     if (!t) return;
     gtk_stack_set_visible_child(GTK_STACK(bw->content_stack), GTK_WIDGET(t->view));
     browser_window_update_chrome(bw);
+    if (gtk_window_is_active(GTK_WINDOW(bw->window))) notices_seen(t->view);
     if (tab_is_start_page(t)) start_page_focus(t);
     else if (!*tab_get_uri(t)) gtk_widget_grab_focus(bw->address);
     else gtk_widget_grab_focus(GTK_WIDGET(t->view));
@@ -1579,6 +1581,7 @@ static void a_adblock_site(GSimpleAction *a, GVariant *p, gpointer data)
     webkit_web_view_reload(t->view);
 }
 static void a_show_downloads(GSimpleAction *a, GVariant *p, gpointer data) { downloads_popup_toggle(BW); }
+static void a_show_notifications(GSimpleAction *a, GVariant *p, gpointer data) { notifications_popup_toggle(BW); }
 
 
 typedef struct { BrowserWindow *bw; } SelCtx;
@@ -1634,7 +1637,7 @@ static void a_shortcuts(GSimpleAction *a, GVariant *p, gpointer data)
         { "Shift+Enter", "Open address in new tab" }, { "Ctrl+Shift+V", "Paste and go (address bar)" }, { "Alt+Left / Alt+Right", "Back / Forward" },
         { "F5, Ctrl+R", "Reload" }, { "Ctrl+F5", "Reload without cache" },
         { "Ctrl+D", "Bookmark page" }, { "F9", "Show/hide vertical tab bar" }, { "F7, Ctrl+Shift+B", "Show/hide vertical bookmarks bar" },
-        { "Ctrl+Shift+H, Ctrl+H", "History" }, { "Ctrl+J", "Downloads" },
+        { "Ctrl+Shift+H, Ctrl+H", "History" }, { "Ctrl+J", "Downloads" }, { "Ctrl+Shift+M", "Notifications" },
         { "Ctrl+F", "Find in page" }, { "F3 / Shift+F3", "Find next / previous" },
         { "Ctrl++ / Ctrl+- / Ctrl+0", "Zoom in / out / reset" }, { "F11", "Full screen" },
         { "Ctrl+U", "View source" }, { "Ctrl+Shift+I, F12", "Developer tools" },
@@ -1693,6 +1696,7 @@ static const GActionEntry win_actions[] = {
     { "print", a_print }, { "save-page", a_save_page }, { "open-file", a_open_file },
     { "preferences", a_preferences }, { "private-data", a_private_data },
     { "show-history", a_show_history }, { "show-downloads", a_show_downloads },
+    { "show-notifications", a_show_notifications },
     { "block-element", a_block_element }, { "adblock-site", a_adblock_site },
     { "toggle-vtabs", NULL, NULL, "false", s_vtabs },
     { "toggle-vbookmarks", NULL, NULL, "false", s_vbookmarks },
@@ -2079,6 +2083,8 @@ static gboolean on_focus_in(GtkWidget *w, GdkEvent *ev, BrowserWindow *bw)
 {
     windows = g_list_remove(windows, bw);
     windows = g_list_prepend(windows, bw);
+    Tab *t = browser_window_current_tab(bw);
+    if (t) notices_seen(t->view);
     return FALSE;
 }
 
@@ -2118,6 +2124,17 @@ static gboolean on_window_state(GtkWidget *w, GdkEventWindowState *ev, BrowserWi
 
 static gboolean on_delete(GtkWidget *w, GdkEvent *ev, BrowserWindow *bw)
 {
+    /* closing the last window keeps the browser running in the tray, so pages can still
+     * send notifications; Quit (Ctrl+Q or the tray menu) ends it */
+    if (!quitting && pref_get_bool("close_to_tray") && tray_is_active()) {
+        int visible = 0;
+        for (GList *l = windows; l; l = l->next)
+            if (gtk_widget_get_visible(GTK_WIDGET(((BrowserWindow *)l->data)->window))) visible++;
+        if (visible <= 1) {
+            tray_hide_browser();
+            return TRUE;
+        }
+    }
     if (!quitting && g_list_length(windows) == 1)
         session_save();   /* last window: remember it for next start */
     return FALSE;
@@ -2409,6 +2426,7 @@ BrowserWindow *browser_window_new(GtkApplication *app)
     gtk_widget_set_valign(bw->vbm_button, GTK_ALIGN_CENTER);
     gtk_actionable_set_action_name(GTK_ACTIONABLE(bw->vbm_button), "win.toggle-vbookmarks");
     build_address_bar(bw);
+    gtk_box_pack_start(GTK_BOX(bw->toolbar), build_notify_button(bw), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bw->toolbar), build_downloads_button(bw), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bw->toolbar), bw->vbm_button, FALSE, FALSE, 0);
     /* the toggle is outside the padded address bar so it can reach the window edges */
@@ -2555,6 +2573,7 @@ BrowserWindow *browser_window_new(GtkApplication *app)
 
 
     g_signal_connect(bw->window, "focus-in-event", G_CALLBACK(on_focus_in), bw);
+    tray_window_added(bw);
     g_signal_connect(bw->window, "configure-event", G_CALLBACK(on_configure), bw);
     g_signal_connect(bw->window, "window-state-event", G_CALLBACK(on_window_state), bw);
     g_signal_connect(bw->window, "delete-event", G_CALLBACK(on_delete), bw);
@@ -2663,6 +2682,83 @@ static GtkWidget *build_downloads_button(BrowserWindow *bw)
     profile_connect(EV_DOWNLOADS, downloads_button_update, bw);
     downloads_button_update(bw);
     return bw->downloads_btn;
+}
+
+/* ---------------------------------------------------------------- */
+/* notifications button (the bell, left of the downloads button)    */
+
+/* Shown only while there are notifications; a soft red dot with the number of unread ones
+ * sits on its top right corner. */
+static void notify_button_update(gpointer data)
+{
+    BrowserWindow *bw = data;
+    guint unread = notices_unread();
+    gtk_widget_set_visible(bw->notify_btn, notices->len > 0);
+    char *tip = unread ? g_strdup_printf("Notifications: %u new (Ctrl+Shift+M)", unread)
+                       : g_strdup_printf("Notifications: %u (Ctrl+Shift+M)", notices->len);
+    gtk_widget_set_tooltip_text(bw->notify_btn, tip);
+    g_free(tip);
+    gtk_widget_queue_draw(bw->notify_badge);
+}
+
+static gboolean draw_notify_badge(GtkWidget *w, cairo_t *cr, BrowserWindow *bw)
+{
+    guint unread = notices_unread();
+    if (!unread) return FALSE;
+    double W = gtk_widget_get_allocated_width(w);
+    double r = 5.5, cx = W - r - 0.5, cy = r + 0.5;
+    cairo_arc(cr, cx, cy, r, 0, 2 * G_PI);
+    cairo_set_source_rgb(cr, 0xe5 / 255.0, 0x53 / 255.0, 0x4b / 255.0);   /* soft red, as in the tray */
+    cairo_fill(cr);
+    char num[8];
+    g_snprintf(num, sizeof num, "%u", MIN(unread, 9u));
+    cairo_select_font_face(cr, "sans-serif", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 8.5);
+    cairo_text_extents_t te;
+    cairo_text_extents(cr, num, &te);
+    cairo_move_to(cr, cx - te.x_bearing - te.width / 2, cy - te.y_bearing - te.height / 2);
+    cairo_set_source_rgb(cr, 1, 1, 1);
+    cairo_show_text(cr, num);
+    return FALSE;
+}
+
+static void notify_clicked(GtkButton *b, BrowserWindow *bw) { notifications_popup_toggle(bw); }
+
+static GtkWidget *build_notify_button(BrowserWindow *bw)
+{
+    bw->notify_btn = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(bw->notify_btn), GTK_RELIEF_NONE);
+    gtk_widget_set_focus_on_click(bw->notify_btn, FALSE);
+    gtk_widget_set_can_focus(bw->notify_btn, FALSE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(bw->notify_btn), "nav-button");
+    gtk_widget_set_name(bw->notify_btn, "notify-button");
+    gtk_widget_set_valign(bw->notify_btn, GTK_ALIGN_CENTER);
+    GtkWidget *ov = gtk_overlay_new();
+    const char *icon = gtk_icon_theme_has_icon(gtk_icon_theme_get_default(), "notification-symbolic")
+                     ? "notification-symbolic" : "preferences-system-notifications-symbolic";
+    GtkWidget *img = gtk_image_new_from_icon_name(icon, GTK_ICON_SIZE_LARGE_TOOLBAR);
+    gtk_image_set_pixel_size(GTK_IMAGE(img), 14);
+    gtk_widget_set_size_request(img, 24, 24);
+    gtk_container_add(GTK_CONTAINER(ov), img);
+    bw->notify_badge = gtk_drawing_area_new();
+    g_signal_connect(bw->notify_badge, "draw", G_CALLBACK(draw_notify_badge), bw);
+    gtk_overlay_add_overlay(GTK_OVERLAY(ov), bw->notify_badge);
+    gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(ov), bw->notify_badge, TRUE);
+    gtk_container_add(GTK_CONTAINER(bw->notify_btn), ov);
+    gtk_widget_show_all(bw->notify_btn);
+    gtk_widget_set_no_show_all(bw->notify_btn, TRUE);
+    g_signal_connect(bw->notify_btn, "clicked", G_CALLBACK(notify_clicked), bw);
+    profile_connect(EV_NOTIFICATIONS, notify_button_update, bw);
+    notify_button_update(bw);
+    return bw->notify_btn;
+}
+
+void browser_window_show(BrowserWindow *bw)
+{
+    GtkWindow *w = GTK_WINDOW(bw->window);
+    gtk_widget_show(GTK_WIDGET(w));
+    gtk_window_deiconify(w);
+    gtk_window_present_with_time(w, gtk_get_current_event_time());
 }
 
 /* ---------------------------------------------------------------- */

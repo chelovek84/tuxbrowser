@@ -26,6 +26,8 @@ static const struct { const char *key, *val; } default_strings[] = {
     { "gpu_memory",     "auto" },           /* auto | normal | low (applies at start) */
     { "video_decoding", "auto" },           /* auto | software | hardware (applies at start) */
     { "decoder_library", "auto" },          /* auto | ffmpeg | native (applies at start) */
+    { "notify_allowed", "" },               /* sites allowed to show notifications, one origin per line */
+    { "notify_denied",  "" },               /* sites not allowed to */
 };
 static const struct { const char *key; gboolean val; } default_bools[] = {
     { "mouse_gestures",      TRUE },
@@ -37,6 +39,10 @@ static const struct { const char *key; gboolean val; } default_bools[] = {
     { "new_tab_next",        TRUE },
     { "window_maximized",    FALSE },
     { "close_last_tab_closes_window", FALSE },
+    { "notify_desktop",      FALSE },       /* also show web notifications as desktop notifications */
+    { "tray_icon",           TRUE },        /* icon in the system tray */
+    { "tray_blink",          TRUE },        /* it blinks while there are unread notifications */
+    { "close_to_tray",       FALSE },       /* closing the last window hides it in the tray */
 };
 static const struct { const char *key; int val; } default_ints[] = {
     { "default_zoom",       100 },

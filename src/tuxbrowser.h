@@ -20,7 +20,7 @@
 
 typedef enum {
     EV_SETTINGS, EV_BOOKMARKS, EV_HISTORY,
-    EV_CLOSED_TABS, EV_DOWNLOADS, EV_ADBLOCK,
+    EV_CLOSED_TABS, EV_DOWNLOADS, EV_ADBLOCK, EV_NOTIFICATIONS,
     EV_LAST
 } ProfileEvent;
 
@@ -129,6 +129,7 @@ struct _BrowserWindow {
     GtkWidget *toolbar;
     GtkWidget *back_btn, *fwd_btn, *reload_btn, *zoom_btn, *zoom_btn_label;
     GtkWidget *downloads_btn, *downloads_ring;  /* title bar button; progress ring around its icon */
+    GtkWidget *notify_btn, *notify_badge;       /* bell, shown while there are notifications */
     double downloads_frac;        /* overall progress 0..1, < 0 while sizes are unknown */
     int downloads_running, downloads_spin;
     GtkWidget *address;
@@ -174,6 +175,7 @@ void   browser_window_select_tab(BrowserWindow *bw, Tab *tab);
 void   browser_window_cycle_tab(BrowserWindow *bw, int dir);
 void   browser_window_tab_context_menu(BrowserWindow *bw, Tab *tab, GdkEventButton *ev);
 void   browser_window_flash_status(BrowserWindow *bw, const char *text);
+void   browser_window_show(BrowserWindow *bw);   /* unhide, unminimize and raise */
 void   browsers_quit(void);
 
 Tab  *tab_new(BrowserWindow *bw, WebKitWebView *related);
@@ -218,6 +220,37 @@ void transfer_cancel(Transfer *t);
 void transfer_open(Transfer *t, gboolean folder);
 void transfers_clear_finished(void);
 
+/* notifications.c : web notifications collected for the bell popover and the tray */
+typedef struct {
+    WebKitNotification *n;
+    WebKitWebView *view;     /* weak: NULL once its tab is gone */
+    char *uri, *host, *title, *body, *tag;
+    GdkPixbuf *icon;         /* the site's favicon when it arrived, may be NULL */
+    gint64 when;             /* g_get_real_time() */
+    gboolean unread;
+} Notice;
+extern GPtrArray *notices;   /* Notice*, newest first */
+void     notifications_init(WebKitWebContext *ctx);
+void     notifications_attach(WebKitWebView *view);
+void     notifications_apply_permissions(void);
+int      notifications_saved_permission(const char *uri);   /* 1 allowed, 0 denied, -1 not asked */
+void     notifications_remember(const char *uri, gboolean allow);
+void     notifications_set_sites(const char *allowed, const char *denied);   /* one site per line */
+gboolean notice_alive(Notice *x);
+void     notice_activate(Notice *x, BrowserWindow *fallback);
+void     notice_dismiss(Notice *x);
+void     notices_clear(void);
+void     notices_mark_read(void);
+void     notices_seen(WebKitWebView *view);
+guint    notices_unread(void);
+
+/* tray.c : system tray icon */
+void     tray_update(void);               /* create / remove / refresh to match the preferences */
+void     tray_window_added(BrowserWindow *bw);
+gboolean tray_is_active(void);            /* the icon is in a tray, so hidden windows can come back */
+void     tray_show_browser(void);
+void     tray_hide_browser(void);
+
 /* adblock.c : filter lists, own rules, per-site exceptions, element picker */
 void        adblock_init(void);
 void        adblock_attach(WebKitUserContentManager *ucm);
@@ -238,6 +271,8 @@ void        adblock_set_rules(const char *text);
 /* popups.c : History and Downloads popovers */
 void history_popup_toggle(BrowserWindow *bw);
 void downloads_popup_toggle(BrowserWindow *bw);
+void notifications_popup_toggle(BrowserWindow *bw);
+void notifications_popup_show(BrowserWindow *bw);   /* opens it, or leaves it open */
 
 /* prefs.c */
 void prefs_dialog_show(GtkWindow *parent);

@@ -308,7 +308,7 @@ static gboolean on_permission(WebKitWebView *v, WebKitPermissionRequest *req, Ta
 {
     const char *what = "use a special feature";
     if (WEBKIT_IS_GEOLOCATION_PERMISSION_REQUEST(req))       what = "know your location";
-    else if (WEBKIT_IS_NOTIFICATION_PERMISSION_REQUEST(req)) what = "show desktop notifications";
+    else if (WEBKIT_IS_NOTIFICATION_PERMISSION_REQUEST(req)) what = "show notifications";
     else if (WEBKIT_IS_USER_MEDIA_PERMISSION_REQUEST(req)) {
         WebKitUserMediaPermissionRequest *um = WEBKIT_USER_MEDIA_PERMISSION_REQUEST(req);
         gboolean a = webkit_user_media_permission_is_for_audio_device(um);
@@ -320,14 +320,31 @@ static gboolean on_permission(WebKitWebView *v, WebKitPermissionRequest *req, Ta
     else if (WEBKIT_IS_MEDIA_KEY_SYSTEM_PERMISSION_REQUEST(req)) what = "play protected (DRM) media";
     else if (WEBKIT_IS_WEBSITE_DATA_ACCESS_PERMISSION_REQUEST(req)) what = "access its cookies in this context";
 
-    GUri *gu = g_uri_parse(tab_get_uri(tab), G_URI_FLAGS_NONE, NULL);
+    /* notifications: asked once per site, the answer is kept (Preferences > Notifications) */
+    gboolean notify = WEBKIT_IS_NOTIFICATION_PERMISSION_REQUEST(req);
+    int saved = notify ? notifications_saved_permission(tab_get_uri(tab)) : -1;
+    if (saved >= 0) {
+        if (saved) webkit_permission_request_allow(req);
+        else webkit_permission_request_deny(req);
+        return TRUE;
+    }
+
+    char *page_uri = g_strdup(tab_get_uri(tab));   /* the tab may close while the dialog is up */
+    GUri *gu = g_uri_parse(page_uri, G_URI_FLAGS_NONE, NULL);
     GtkWidget *d = gtk_message_dialog_new(GTK_WINDOW(tab->win->window), GTK_DIALOG_MODAL,
         GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s wants to %s",
         gu && g_uri_get_host(gu) ? g_uri_get_host(gu) : "This page", what);
     gtk_dialog_add_buttons(GTK_DIALOG(d), "_Deny", GTK_RESPONSE_REJECT, "_Allow", GTK_RESPONSE_ACCEPT, NULL);
+    if (notify)
+        gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(d),
+            "They will appear under the bell next to the address bar. Your answer is remembered "
+            "for this site; you can change it in Preferences > Notifications.");
     int r = gtk_dialog_run(GTK_DIALOG(d));
     gtk_widget_destroy(d);
     if (gu) g_uri_unref(gu);
+    if (notify && (r == GTK_RESPONSE_ACCEPT || r == GTK_RESPONSE_REJECT))
+        notifications_remember(page_uri, r == GTK_RESPONSE_ACCEPT);
+    g_free(page_uri);
     if (r == GTK_RESPONSE_ACCEPT) webkit_permission_request_allow(req);
     else webkit_permission_request_deny(req);
     return TRUE;
@@ -675,6 +692,7 @@ Tab *tab_new_full(BrowserWindow *bw, WebKitWebView *related, gboolean want_start
     g_signal_connect(tab->view, "close", G_CALLBACK(on_close), tab);
     g_signal_connect(tab->view, "mouse-target-changed", G_CALLBACK(on_mouse_target), tab);
     g_signal_connect(tab->view, "permission-request", G_CALLBACK(on_permission), tab);
+    notifications_attach(tab->view);
     g_signal_connect(tab->view, "context-menu", G_CALLBACK(on_context_menu), tab);
     g_signal_connect(tab->view, "enter-fullscreen", G_CALLBACK(on_enter_fullscreen), tab);
     g_signal_connect(tab->view, "leave-fullscreen", G_CALLBACK(on_leave_fullscreen), tab);

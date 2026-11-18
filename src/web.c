@@ -187,6 +187,7 @@ void web_init(void)
 
     start_page_init(ctx);
     downloads_init(ctx);
+    notifications_init(ctx);
 }
 
 static void clear_done(GObject *src, GAsyncResult *res, gpointer data)
