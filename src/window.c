@@ -2667,17 +2667,12 @@ static GtkWidget *build_downloads_button(BrowserWindow *bw)
     gtk_style_context_add_class(gtk_widget_get_style_context(bw->downloads_btn), "nav-button");
     gtk_widget_set_name(bw->downloads_btn, "downloads-button");
     gtk_widget_set_valign(bw->downloads_btn, GTK_ALIGN_CENTER);
-    GtkWidget *ov = gtk_overlay_new();
-    GtkWidget *img = gtk_image_new_from_icon_name("folder-download-symbolic", GTK_ICON_SIZE_LARGE_TOOLBAR);
-    gtk_image_set_pixel_size(GTK_IMAGE(img), 14);
-    gtk_widget_set_size_request(img, 24, 24);
-    gtk_container_add(GTK_CONTAINER(ov), img);
-    bw->downloads_ring = gtk_drawing_area_new();
-    gtk_style_context_add_class(gtk_widget_get_style_context(bw->downloads_ring), "downloads-ring");
-    g_signal_connect(bw->downloads_ring, "draw", G_CALLBACK(draw_downloads_ring), bw);
-    gtk_overlay_add_overlay(GTK_OVERLAY(ov), bw->downloads_ring);
-    gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(ov), bw->downloads_ring, TRUE);
-    gtk_container_add(GTK_CONTAINER(bw->downloads_btn), ov);
+    /* the ring is drawn over the icon itself: an overlay on top would take the clicks */
+    bw->downloads_ring = gtk_image_new_from_icon_name("folder-download-symbolic", GTK_ICON_SIZE_LARGE_TOOLBAR);
+    gtk_image_set_pixel_size(GTK_IMAGE(bw->downloads_ring), 14);
+    gtk_widget_set_size_request(bw->downloads_ring, 24, 24);
+    g_signal_connect_after(bw->downloads_ring, "draw", G_CALLBACK(draw_downloads_ring), bw);
+    gtk_container_add(GTK_CONTAINER(bw->downloads_btn), bw->downloads_ring);
     g_signal_connect(bw->downloads_btn, "clicked", G_CALLBACK(downloads_clicked), bw);
     profile_connect(EV_DOWNLOADS, downloads_button_update, bw);
     downloads_button_update(bw);
@@ -2731,18 +2726,14 @@ static GtkWidget *build_notify_button(BrowserWindow *bw)
     gtk_style_context_add_class(gtk_widget_get_style_context(bw->notify_btn), "nav-button");
     gtk_widget_set_name(bw->notify_btn, "notify-button");
     gtk_widget_set_valign(bw->notify_btn, GTK_ALIGN_CENTER);
-    GtkWidget *ov = gtk_overlay_new();
     const char *icon = gtk_icon_theme_has_icon(gtk_icon_theme_get_default(), "notification-symbolic")
                      ? "notification-symbolic" : "preferences-system-notifications-symbolic";
-    GtkWidget *img = gtk_image_new_from_icon_name(icon, GTK_ICON_SIZE_LARGE_TOOLBAR);
-    gtk_image_set_pixel_size(GTK_IMAGE(img), 14);
-    gtk_widget_set_size_request(img, 24, 24);
-    gtk_container_add(GTK_CONTAINER(ov), img);
-    bw->notify_badge = gtk_drawing_area_new();
-    g_signal_connect(bw->notify_badge, "draw", G_CALLBACK(draw_notify_badge), bw);
-    gtk_overlay_add_overlay(GTK_OVERLAY(ov), bw->notify_badge);
-    gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(ov), bw->notify_badge, TRUE);
-    gtk_container_add(GTK_CONTAINER(bw->notify_btn), ov);
+    /* the dot is drawn over the icon itself: an overlay on top would take the clicks */
+    bw->notify_badge = gtk_image_new_from_icon_name(icon, GTK_ICON_SIZE_LARGE_TOOLBAR);
+    gtk_image_set_pixel_size(GTK_IMAGE(bw->notify_badge), 14);
+    gtk_widget_set_size_request(bw->notify_badge, 24, 24);
+    g_signal_connect_after(bw->notify_badge, "draw", G_CALLBACK(draw_notify_badge), bw);
+    gtk_container_add(GTK_CONTAINER(bw->notify_btn), bw->notify_badge);
     gtk_widget_show_all(bw->notify_btn);
     g_signal_connect(bw->notify_btn, "clicked", G_CALLBACK(notify_clicked), bw);
     profile_connect(EV_NOTIFICATIONS, notify_button_update, bw);

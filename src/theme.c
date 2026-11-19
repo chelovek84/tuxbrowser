@@ -70,7 +70,7 @@ static const char *CSS =
 
 /* ---- downloads button: a nav button whose icon gets a progress ring while downloading ---- */
 "#downloads-button image, #notify-button image { color: #2b3846; }"
-"#downloads-button.active image, #downloads-button .downloads-ring { color: #2f6fd0; }"
+"#addressbar #downloads-button.active image { color: #2f6fd0; }"
 /* ---- History and Downloads popups ---- */
 ".tux-popup label { color: #1d2733; }"
 ".tux-popup label.dim-label { color: #5b6672; }"
@@ -162,7 +162,7 @@ static const char *CSS =
 static const char *DARK_CSS =
 "#main-menu > image, #addressbar button.nav-button > image, #vtabs-button > image, #vbm-button > image,"
 "  #downloads-button image, #notify-button image, #newtab-button > image, #trash-button > image { color: #d5dbe1; }"
-"#downloads-button.active image, #downloads-button .downloads-ring { color: #6ea0e8; }"
+"#addressbar #downloads-button.active image { color: #6ea0e8; }"
 "#main-menu:hover, #addressbar button.nav-button:hover, #tabtitlebar button.titlebutton:hover,"
 "  #toolrow #vtabs-button:hover {"
 "  border-color: #5a6672; background-image: linear-gradient(#46505b, #3a434d); }"
