@@ -1,11 +1,12 @@
-/* Tray icon (XEmbed system tray, as in ClawsBlink): a round soft red badge with a white
- * bell; while there are unread notifications it blinks to white with a red bell.
+/* Tray icon (XEmbed system tray): a round violet badge with a white bell; while there are
+ * unread notifications it blinks between violet and raspberry.
  * Always 22 px. Left click shows or hides the browser, right click opens a small menu. */
 #include "tuxbrowser.h"
 #include <math.h>
 
-#define BADGE_RED     0xE5534B   /* soft red */
-#define BADGE_WHITE   0xFFFFFF
+/* badge colours (0xRRGGBB) */
+#define IDLE_COLOR    0x7E5BD6   /* violet */
+#define UNREAD_COLOR  0xE0457B   /* raspberry */
 #define BLINK_MS      500
 
 static GtkStatusIcon *icon;
@@ -37,35 +38,25 @@ static void add_stop(cairo_pattern_t *p, double off, guint32 rgb, double k)
     cairo_pattern_add_color_stop_rgb(p, off, r, g, b);
 }
 
-/* Badge with a soft vertical gradient and a 1 px margin, the bell inside in the same
- * footprint as ClawsBlink's envelope, so the two icons look alike side by side. A white
- * badge gets a thin ring in the bell's colour to stand out on light panels. */
-static GdkPixbuf *draw_badge(int size, guint32 badge, guint32 bell)
+/* Round badge with a 1 px margin and a soft vertical gradient, a white bell inside. */
+static GdkPixbuf *draw_badge(int size, guint32 color)
 {
     cairo_surface_t *s = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
     cairo_t *cr = cairo_create(s);
-    double c = size / 2.0, rad = (size - 2.0) / 2.0, r, g, b;
+    double c = size / 2.0, rad = (size - 2.0) / 2.0;
 
     cairo_pattern_t *grad = cairo_pattern_create_linear(0, c - rad, 0, c + rad);
-    add_stop(grad, 0.0, badge, badge == BADGE_WHITE ? 0.0 : 0.12);
-    add_stop(grad, 1.0, badge, badge == BADGE_WHITE ? -0.08 : -0.12);
+    add_stop(grad, 0.0, color, 0.12);
+    add_stop(grad, 1.0, color, -0.12);
     cairo_arc(cr, c, c, rad, 0, 2 * G_PI);
     cairo_set_source(cr, grad);
     cairo_fill(cr);
     cairo_pattern_destroy(grad);
-    if (badge == BADGE_WHITE) {
-        to_rgb(bell, 0, &r, &g, &b);
-        cairo_set_source_rgb(cr, r, g, b);
-        cairo_set_line_width(cr, 1.0);
-        cairo_arc(cr, c, c, rad - 0.5, 0, 2 * G_PI);
-        cairo_stroke(cr);
-    }
 
     /* bell: dome and flared skirt, the knob on top and the clapper below */
-    double u = rad * 2 / 22.0 * 0.82;   /* designed on a 22 px badge, scaled to the envelope's size */
+    double u = rad * 2 / 22.0 * 0.82;   /* designed on a 22 px badge, scaled to ~60% of its width */
     double top = c - 6.0 * u, rim = c + 4.5 * u;
-    to_rgb(bell, 0, &r, &g, &b);
-    cairo_set_source_rgb(cr, r, g, b);
+    cairo_set_source_rgb(cr, 1, 1, 1);
     cairo_move_to(cr, c - 7.0 * u, rim);
     cairo_curve_to(cr, c - 5.0 * u, rim - 1.5 * u, c - 5.0 * u, c - 0.5 * u, c - 5.0 * u, c - 1.0 * u);
     cairo_curve_to(cr, c - 5.0 * u, top, c + 5.0 * u, top, c + 5.0 * u, c - 1.0 * u);
@@ -87,8 +78,8 @@ static void icons_load(void)
 {
     g_clear_object(&pix_idle);
     g_clear_object(&pix_unread);
-    pix_idle = draw_badge(ICON_SIZE, BADGE_RED, BADGE_WHITE);
-    pix_unread = draw_badge(ICON_SIZE, BADGE_WHITE, BADGE_RED);
+    pix_idle = draw_badge(ICON_SIZE, IDLE_COLOR);
+    pix_unread = draw_badge(ICON_SIZE, UNREAD_COLOR);
 }
 
 /* ---------------------------------------------------------------- */
@@ -135,8 +126,8 @@ static void blink_stop(void)
     blink_id = 0;
 }
 
-/* Steady red with nothing new; while there is, it blinks red / white, or stays white
- * while you are in the browser (or blinking is turned off). */
+/* Steady violet with nothing new; while there is, it blinks violet / raspberry, or stays
+ * raspberry while you are in the browser (or blinking is turned off). */
 static void tray_apply(void)
 {
     if (!icon || !sized) return;

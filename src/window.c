@@ -2687,13 +2687,11 @@ static GtkWidget *build_downloads_button(BrowserWindow *bw)
 /* ---------------------------------------------------------------- */
 /* notifications button (the bell, left of the downloads button)    */
 
-/* Shown only while there are notifications; a soft red dot with the number of unread ones
- * sits on its top right corner. */
+/* Always shown; a soft red dot with the number of unread ones sits on its top right corner. */
 static void notify_button_update(gpointer data)
 {
     BrowserWindow *bw = data;
     guint unread = notices_unread();
-    gtk_widget_set_visible(bw->notify_btn, notices->len > 0);
     char *tip = unread ? g_strdup_printf("Notifications: %u new (Ctrl+Shift+M)", unread)
                        : g_strdup_printf("Notifications: %u (Ctrl+Shift+M)", notices->len);
     gtk_widget_set_tooltip_text(bw->notify_btn, tip);
@@ -2746,7 +2744,6 @@ static GtkWidget *build_notify_button(BrowserWindow *bw)
     gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(ov), bw->notify_badge, TRUE);
     gtk_container_add(GTK_CONTAINER(bw->notify_btn), ov);
     gtk_widget_show_all(bw->notify_btn);
-    gtk_widget_set_no_show_all(bw->notify_btn, TRUE);
     g_signal_connect(bw->notify_btn, "clicked", G_CALLBACK(notify_clicked), bw);
     profile_connect(EV_NOTIFICATIONS, notify_button_update, bw);
     notify_button_update(bw);

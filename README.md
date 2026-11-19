@@ -59,15 +59,14 @@ A fast, lightweight web browser written in C on WebKitGTK.
 - **Downloads button:** while something downloads, a ring around its icon fills up with the overall
   progress (a turning arc when the size isn't known); the tooltip shows how many and the percentage.
 - **Notifications** from web pages are collected in the browser instead of desktop bubbles. A bell
-  appears next to the downloads button while there are any, with a red dot counting the unread
-  ones. Click it (or **Ctrl+Shift+M**) for the list: clicking a notification shows its tab and lets
+  next to the downloads button is always shown, with a red dot counting the unread ones. Click it (or **Ctrl+Shift+M**) for the list: clicking a notification shows its tab and lets
   the page open the message; × dismisses it. Notifications from the tab you are looking at arrive
   already read. A site asks once (WebKit only lets it ask from a click), and the answer is
   remembered; Preferences → Notifications lists the allowed and refused sites and can also send
   them to the desktop. They only arrive while the page is open in a tab.
-- **Tray icon** (X11 trays with XEmbed support: Xfce, MATE, Cinnamon, LXQt...): a soft red badge with a
-  bell. It blinks red/white while there are unread notifications, and stays white while a browser
-  window has focus. Left click shows or hides the browser (with unread notifications it opens the
+- **Tray icon** (X11 trays with XEmbed support: Xfce, MATE, Cinnamon, LXQt...): a violet badge with a
+  white bell. It blinks violet/raspberry while there are unread notifications, and stays raspberry
+  while a browser window has focus. Left click shows or hides the browser (with unread notifications it opens the
   list); right click has a menu with Quit. With **Keep running in the tray when the last window is
   closed** (Preferences → Notifications, off by default), closing the window hides it so pages keep
   running; quit with **Ctrl+Q** or from the menu.

@@ -129,7 +129,7 @@ struct _BrowserWindow {
     GtkWidget *toolbar;
     GtkWidget *back_btn, *fwd_btn, *reload_btn, *zoom_btn, *zoom_btn_label;
     GtkWidget *downloads_btn, *downloads_ring;  /* title bar button; progress ring around its icon */
-    GtkWidget *notify_btn, *notify_badge;       /* bell, shown while there are notifications */
+    GtkWidget *notify_btn, *notify_badge;       /* bell, always shown */
     double downloads_frac;        /* overall progress 0..1, < 0 while sizes are unknown */
     int downloads_running, downloads_spin;
     GtkWidget *address;
