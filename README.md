@@ -147,6 +147,8 @@ A fast, lightweight web browser written in C on WebKitGTK.
 - **Passkeys and security keys** are not available: WebKitGTK has no Web Authentication. Sites that
   ask for one get the answer a browser with no authenticator gives, so they offer another way to sign
   in (for Microsoft accounts, skip or cancel the passkey step).
+- **Calls** (Teams, Meet...) need WebRTC. It is turned on, but Ubuntu's WebKitGTK is built without it,
+  so calls only work with a WebKitGTK built with WebRTC.
 
 The full shortcut list is under ☰ → Keyboard Shortcuts.
 

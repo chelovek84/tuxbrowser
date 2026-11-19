@@ -221,6 +221,10 @@ void web_init(void)
     webkit_settings_set_enable_fullscreen(settings, TRUE);
     webkit_settings_set_media_playback_requires_user_gesture(settings, FALSE);
     webkit_settings_set_enable_webgl(settings, TRUE);
+    /* calls (Teams, Meet...): camera and microphone, and WebRTC. Ubuntu's WebKitGTK is built
+     * without WebRTC, so there this does nothing; a WebKit built with it gets calls working. */
+    webkit_settings_set_enable_media_stream(settings, TRUE);
+    webkit_settings_set_enable_webrtc(settings, TRUE);
     webkit_settings_set_default_charset(settings, "utf-8");
     web_apply_settings();
 
