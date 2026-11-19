@@ -150,11 +150,14 @@ static void notice_free(Notice *x)
     g_free(x);
 }
 
-/* the page closed it (it was read there, or replaced) */
+/* The page closed it. Sites like Teams close their own toasts after a few seconds, so
+ * this is no sign it was read: the entry stays in the list (and unread) until you look
+ * at the tab or dismiss it; only the page's object, now dead, is let go. A replacement
+ * with the same tag still takes its place in on_show_notification(). */
 static void notice_closed(WebKitNotification *n, Notice *x)
 {
-    g_ptr_array_remove(notices, x);
-    profile_emit(EV_NOTIFICATIONS);
+    g_signal_handlers_disconnect_by_func(x->n, notice_closed, x);
+    g_clear_object(&x->n);
 }
 
 static Tab *tab_for_view(WebKitWebView *view)
