@@ -629,6 +629,7 @@ static gboolean spare_create(gpointer data)
     spare_ucm = webkit_user_content_manager_new();
     webkit_user_content_manager_register_script_message_handler(spare_ucm, "start");
     adblock_attach(spare_ucm);
+    web_attach_scripts(spare_ucm);
     spare_view = create_view(NULL, spare_ucm);
     webkit_web_view_load_uri(spare_view, START_URI);
     return G_SOURCE_REMOVE;
@@ -661,6 +662,7 @@ Tab *tab_new_full(BrowserWindow *bw, WebKitWebView *related, gboolean want_start
         tab->ucm = webkit_user_content_manager_new();
         webkit_user_content_manager_register_script_message_handler(tab->ucm, "start");
         adblock_attach(tab->ucm);
+        web_attach_scripts(tab->ucm);
         tab->view = create_view(related, tab->ucm);
     }
     g_signal_connect(tab->ucm, "script-message-received::start", G_CALLBACK(on_script_message), tab);

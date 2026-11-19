@@ -27,6 +27,45 @@ void web_apply_settings(void)
 }
 
 /* ---------------------------------------------------------------- */
+/* page scripts                                                      */
+
+/* This WebKit has no Web Authentication, so navigator.credentials is missing. Sites that
+ * trust the Safari user agent call navigator.credentials.create() anyway and break (the
+ * Microsoft sign-in passkey step). Give them a container that answers the way a browser
+ * with no authenticator does: passkey requests fail with NotAllowedError, so the site
+ * offers another way to sign in; password and federated requests find nothing. */
+static const char *CREDENTIALS_JS =
+    "(function () {"
+    "  if ('credentials' in navigator || !window.isSecureContext) return;"
+    "  var none = function (o) {"
+    "    if (o && o.publicKey) return Promise.reject(new DOMException("
+    "      'Passkeys and security keys are not supported in this browser.', 'NotAllowedError'));"
+    "    return Promise.resolve(null);"
+    "  };"
+    "  function CredentialsContainer() { throw new TypeError('Illegal constructor'); }"
+    "  var c = Object.create(CredentialsContainer.prototype);"
+    "  Object.defineProperties(CredentialsContainer.prototype, {"
+    "    get: { value: function get(o) { return none(o); }, writable: true, configurable: true },"
+    "    create: { value: function create(o) { return none(o); }, writable: true, configurable: true },"
+    "    store: { value: function store() { return Promise.resolve(); }, writable: true, configurable: true },"
+    "    preventSilentAccess: { value: function preventSilentAccess() { return Promise.resolve(); },"
+    "                           writable: true, configurable: true }"
+    "  });"
+    "  Object.defineProperty(window, 'CredentialsContainer',"
+    "    { value: CredentialsContainer, writable: true, configurable: true });"
+    "  Object.defineProperty(Navigator.prototype, 'credentials',"
+    "    { get: function () { return c; }, enumerable: true, configurable: true });"
+    "})();";
+
+void web_attach_scripts(WebKitUserContentManager *ucm)
+{
+    WebKitUserScript *s = webkit_user_script_new(CREDENTIALS_JS, WEBKIT_USER_CONTENT_INJECT_ALL_FRAMES,
+                                                 WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START, NULL, NULL);
+    webkit_user_content_manager_add_script(ucm, s);
+    webkit_user_script_unref(s);
+}
+
+/* ---------------------------------------------------------------- */
 /* languages (Accept-Language, navigator.languages, spell checking) */
 
 static gboolean lang_seen(GPtrArray *a, const char *tag)

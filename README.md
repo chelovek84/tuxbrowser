@@ -144,6 +144,9 @@ A fast, lightweight web browser written in C on WebKitGTK.
   GStreamer; FFmpeg is used as GStreamer plugins, not as a separate engine.
 - Delete Private Data (Ctrl+Shift+Del, or Preferences → Advanced), Preferences (Ctrl+F12 or Alt+P).
 - The session is restored on startup.
+- **Passkeys and security keys** are not available: WebKitGTK has no Web Authentication. Sites that
+  ask for one get the answer a browser with no authenticator gives, so they offer another way to sign
+  in (for Microsoft accounts, skip or cancel the passkey step).
 
 The full shortcut list is under ☰ → Keyboard Shortcuts.
 

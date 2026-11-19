@@ -196,6 +196,7 @@ WebKitSettings   *web_settings(void);
 void              web_init(void);
 void              web_apply_settings(void);
 void              web_apply_languages(void);
+void              web_attach_scripts(WebKitUserContentManager *ucm);   /* page fixes, at document start */
 char            **web_system_languages(void);
 void              web_clear_private_data(gboolean history, gboolean cookies, gboolean cache, gboolean other);
 
