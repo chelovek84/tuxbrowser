@@ -59,17 +59,30 @@ A fast, lightweight web browser written in C on WebKitGTK.
 - **Downloads button:** while something downloads, a ring around its icon fills up with the overall
   progress (a turning arc when the size isn't known); the tooltip shows how many and the percentage.
 - **Notifications** from web pages are collected in the browser instead of desktop bubbles. A bell
-  next to the downloads button is always shown, with a red dot counting the unread ones. Click it (or **Ctrl+Shift+M**) for the list: clicking a notification shows its tab and lets
-  the page open the message; × dismisses it. Notifications from the tab you are looking at arrive
-  already read. A site asks once (WebKit only lets it ask from a click), and the answer is
-  remembered; Preferences → Notifications lists the allowed and refused sites and can also send
-  them to the desktop. They only arrive while the page is open in a tab.
+  next to the downloads button is always shown, with a red dot counting the unread ones. Click it (or
+  **Ctrl+Shift+M**) for the list, newest first (up to 50). Each entry shows the site, the title and text,
+  and when it arrived ("just now", "12 min ago", "14:37", or the date for older ones).
+  - **Nothing is missed while you are away.** Sites such as Teams close their own pop-ups after a few
+    seconds; in other browsers that removes them from the desktop's notification centre too. Here they
+    stay in the list, unread, until you look at the tab they came from or dismiss them.
+  - Clicking an entry shows its tab and lets the page open the message (the chat, the mail...). If the
+    page has already closed the notification, it just shows the tab. If the tab has been closed since
+    (the entry says "tab closed"), the page's address opens in a new tab. × dismisses an entry.
+  - Notifications from the tab you are looking at arrive already read, and a new one with the same tag
+    as an older one replaces it.
+  - A site asks once (WebKit only lets it ask from a click), and the answer is remembered;
+    Preferences → Notifications lists the allowed and refused sites and can also send them to the
+    desktop.
+  - They only arrive while the page is open in a tab. To get them with no window open, use **Keep
+    running in the tray** (below).
 - **Tray icon** (X11 trays with XEmbed support: Xfce, MATE, Cinnamon, LXQt...): a violet badge with a
-  white bell. It blinks violet/raspberry while there are unread notifications, and stays raspberry
-  while a browser window has focus. Left click shows or hides the browser (with unread notifications it opens the
-  list); right click has a menu with Quit. With **Keep running in the tray when the last window is
-  closed** (Preferences → Notifications, off by default), closing the window hides it so pages keep
-  running; quit with **Ctrl+Q** or from the menu.
+  white bell. It blinks violet/raspberry while there are unread notifications (it can be set to stay
+  raspberry instead), and stays raspberry while a browser window has focus; the tooltip shows how many
+  are new. Left click shows or hides the browser (with unread notifications it opens the list). Right
+  click has a menu: Show Tux Browser, Notifications, Dismiss All Notifications, New Window, Keep Running
+  in Tray When Closed, and Quit. With **Keep running in the tray when the last window is closed**
+  (Preferences → Notifications, off by default), closing the window hides it so pages keep running and
+  can still send notifications; quit with **Ctrl+Q** or from the menu.
 - **Ad blocking** (on by default; Preferences → Ad Blocking switches it off and on), working like the VIA
   browser's:
   - **Filter lists** in Adblock Plus format, EasyList by default. They are downloaded on first use and
